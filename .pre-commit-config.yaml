@@ -3,7 +3,7 @@
 # Refresh pinned versions with: pre-commit autoupdate
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: detect-private-key        # reject SSH or TLS private keys in the diff
       - id: check-added-large-files   # reject large binaries, usually a state file or an archive
@@ -14,6 +14,6 @@ repos:
       - id: trailing-whitespace       # strip trailing whitespace
 
   - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.28.0
+    rev: v8.30.0
     hooks:
       - id: gitleaks                  # detect credentials, tokens and API keys in the diff
