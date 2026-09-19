@@ -63,7 +63,7 @@ This is the target, not the current state. See the status below for what actuall
 **Phase 1 — the platform**
 
 - [x] Repository foundations: secret-safe `.gitignore`, pre-commit guardrails
-- [ ] OpenStack access: project, application credentials, resource inventory
+- [ ] OpenStack access: project, application credentials, [resource inventory](docs/platform-inventory.md)
 - [ ] Network layer: network, subnet, router, security groups, keypair
 - [ ] Remote state in Swift / S3, with locking
 - [ ] Compute: cluster instances, cloud-init, floating IP, Cinder volumes
@@ -89,8 +89,8 @@ that were rejected and why.
 | Decision | Rationale | Record |
 |---|---|---|
 | OpenTofu rather than Terraform | MPL-2.0 licensing, supported by Infomaniak's own documentation | [ADR 0001](docs/adr/0001-use-opentofu-instead-of-terraform.md) |
-| Self-managed k3s rather than managed Kubernetes | Infomaniak's Public Cloud has no managed Kubernetes offering | planned |
-| Application credentials rather than user passwords | Scoped, revocable, never tied to a human account | planned |
+| Self-managed k3s rather than managed Kubernetes | Node-level control, required to measure energy per workload | planned |
+| Application credentials rather than user passwords | Scoped, revocable, never tied to a human account | [ADR 0003](docs/adr/0003-authenticate-with-an-application-credential.md) |
 
 ## What broke, and how it was fixed
 
@@ -103,9 +103,11 @@ day.
 - **Energy figures are estimates.** RAPL counters are not exposed inside a virtual machine, so
   per-pod power is derived from a model rather than read from hardware. The margin of error is
   documented alongside the dashboard rather than hidden behind it.
-- **DNS records are managed outside the one-command flow.** The Infomaniak Public Cloud does
-  not expose an OpenStack DNS API, so the wildcard record pointing at the floating IP is
-  maintained separately.
+- **DNS records are not yet part of the one-command flow.** The platform does expose Designate,
+  the OpenStack DNS API, so folding the wildcard record into the same `apply` looks feasible. It
+  is not proven: it depends on delegating the subdomain to Designate's nameservers, which is
+  tested in the ingress step. Until then, the record pointing at the floating IP is maintained
+  by hand.
 
 ## License
 

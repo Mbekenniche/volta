@@ -1,0 +1,8 @@
+# direnv template. Copy to .envrc, then run `direnv allow`.
+#
+# No credential belongs in this file, and .envrc itself is ignored by Git.
+# Authentication lives in ~/.config/openstack/clouds.yaml, outside the repository.
+# OS_CLOUD only names which entry of that file to use; the OpenStack CLI and the
+# OpenStack provider for OpenTofu both read it, so neither needs a flag.
+
+export OS_CLOUD=volta-tofu
