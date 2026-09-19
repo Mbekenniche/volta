@@ -1,0 +1,19 @@
+# Guardrails that run before every commit.
+# Install with: pre-commit install
+# Refresh pinned versions with: pre-commit autoupdate
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: detect-private-key        # reject SSH or TLS private keys in the diff
+      - id: check-added-large-files   # reject large binaries, usually a state file or an archive
+        args: [--maxkb=512]
+      - id: check-merge-conflict      # reject leftover <<<<<<< markers
+      - id: check-yaml                # reject syntactically invalid YAML
+      - id: end-of-file-fixer         # enforce a trailing newline
+      - id: trailing-whitespace       # strip trailing whitespace
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.28.0
+    hooks:
+      - id: gitleaks                  # detect credentials, tokens and API keys in the diff

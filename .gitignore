@@ -1,0 +1,81 @@
+# ── OpenTofu / Terraform ───────────────────────────────────────────────
+.terraform/
+.terraform.tfstate.lock.info
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+# tfvars files hold real values. Only the examples are tracked.
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+# The provider lock file IS tracked on purpose: it is what makes builds reproducible.
+!.terraform.lock.hcl
+
+# ── OpenStack credentials ──────────────────────────────────────────────
+clouds.yaml
+clouds.yml
+secure.yaml
+*openrc*
+*-openrc.sh
+app-cred-*.sh
+.envrc
+!.envrc.example
+.direnv/
+
+# ── SSH keys and certificates ──────────────────────────────────────────
+*.pem
+*.key
+*.p12
+*.pfx
+*.ppk
+id_rsa*
+id_ed25519*
+!*.pub
+
+# ── Kubernetes ─────────────────────────────────────────────────────────
+kubeconfig
+kubeconfig*
+*.kubeconfig
+.kube/
+# Plaintext secrets. Encrypted ones (SOPS, Sealed Secrets) are allowed and must
+# carry an explicit suffix: *.sops.yaml or *-sealed.yaml
+*.secret.yaml
+*.secret.yml
+secrets.yaml
+secrets.yml
+!*.sops.yaml
+!*-sealed.yaml
+
+# ── Helm ───────────────────────────────────────────────────────────────
+charts/*.tgz
+**/charts/*.tgz
+.helm/
+
+# ── Environment files and assorted credentials ─────────────────────────
+.env
+.env.*
+!.env.example
+credentials
+*.credentials
+*_credentials
+
+# ── Working notes, not part of the product ─────────────────────────────
+.project/
+
+# ── OS and editors ─────────────────────────────────────────────────────
+.DS_Store
+._*
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
