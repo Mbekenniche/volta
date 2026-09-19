@@ -63,7 +63,7 @@ This is the target, not the current state. See the status below for what actuall
 **Phase 1 — the platform**
 
 - [x] Repository foundations: secret-safe `.gitignore`, pre-commit guardrails
-- [ ] OpenStack access: project, application credentials, [resource inventory](docs/platform-inventory.md)
+- [x] OpenStack access: project, application credentials, [resource inventory](docs/platform-inventory.md)
 - [ ] Network layer: network, subnet, router, security groups, keypair
 - [ ] Remote state in Swift / S3, with locking
 - [ ] Compute: cluster instances, cloud-init, floating IP, Cinder volumes
@@ -89,7 +89,7 @@ that were rejected and why.
 | Decision | Rationale | Record |
 |---|---|---|
 | OpenTofu rather than Terraform | MPL-2.0 licensing, supported by Infomaniak's own documentation | [ADR 0001](docs/adr/0001-use-opentofu-instead-of-terraform.md) |
-| Self-managed k3s rather than managed Kubernetes | Node-level control, required to measure energy per workload | planned |
+| Self-managed k3s rather than managed Kubernetes | The cluster bootstrap is part of what this repository demonstrates | [ADR 0002](docs/adr/0002-run-a-self-managed-k3s-cluster.md) |
 | Application credentials rather than user passwords | Scoped, revocable, never tied to a human account | [ADR 0003](docs/adr/0003-authenticate-with-an-application-credential.md) |
 
 ## What broke, and how it was fixed
