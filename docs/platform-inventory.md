@@ -173,5 +173,14 @@ by the code in this repository.
 
 The default group is not Neutron's stock one. Its TCP egress is split into ports 1–24 and
 26–65535, so **outbound TCP port 25 is filtered**; UDP and ICMP egress are open, and ingress is
-allowed only from members of the group. The group this repository creates deletes Neutron's
-default rules and declares every flow itself (`delete_default_rules = true`).
+allowed only from members of the group.
+
+**That filter is not inherited.** A probe group, created then deleted on 2026-09-24, came with
+Neutron's two stock rules and nothing else: all outbound IPv4, all outbound IPv6. The API that
+would describe this template, `/v2.0/default-security-group-rules`, answers 404 on this
+platform. Security groups here are stateful (`stateful: true`): the reply to an accepted
+connection needs no rule of its own.
+
+The group this repository creates deletes Neutron's default rules and declares every flow
+itself (`delete_default_rules = true`). Why is recorded in
+[ADR 0005](adr/0005-deny-outbound-traffic-by-default.md).
