@@ -1,9 +1,10 @@
 # Platform inventory
 
-What the Infomaniak Public Cloud exposes to this project, read from the API on 2026-09-19 in
-region `dc3-a` with the `volta-opentofu` application credential. Each section names the command
-that produced it. Nothing here was taken from the provider's documentation without being
-confirmed against the API first.
+What the Infomaniak Public Cloud exposes to this project, read from the API in region `dc3-a`
+with the `volta-opentofu` application credential: first on 2026-09-19, then on 2026-09-24 once
+the network layer had been built on top of it. Each section names the command that produced it.
+Nothing here was taken from the provider's documentation without being confirmed against the
+API first.
 
 Account identifiers — project ID, credential ID, network UUIDs — are deliberately left out.
 They are not secrets, but they identify a tenancy and tell a reader nothing.
@@ -76,10 +77,38 @@ RancherOS and CirrOS.
 
 ## Networking
 
-`openstack network list --external`
+`openstack network list` and `openstack network show <name>`
 
-Two external networks: `ext-floating1`, which carries the floating IP pool, and
-`ext-provider1`.
+Four networks are visible before the project creates any of its own:
+
+| Network | External | Shared | MTU | Subnets |
+|---|---|---|---|---|
+| `ext-floating1` | yes | no | 8950 | 5 |
+| `ext-provider1` | yes | no | 8950 | 2 |
+| `ext-net1` | no | yes | 1500 | 18 |
+| `ext-v6only1` | no | yes | 1500 | 1 |
+
+`ext-floating1` carries the floating IP pool, and the router of this platform takes its gateway
+there. The two shared networks are not external, so a router cannot use either of them as its
+gateway.
+
+### Measured on the network layer
+
+`openstack network show`, `openstack port list --long` and `openstack quota show --usage`, after
+the first `apply` of [`infra/`](../infra/):
+
+- **A project network gets an MTU of 1500**, not the 8950 of the external networks. An overlay
+  built on top of it, such as Flannel's VXLAN in the cluster step, has to fit inside 1500 bytes.
+- **Each subnet with DHCP enabled costs two ports**: Neutron places two `network:dhcp` ports on
+  it.
+- **The router is highly available.** Its interface on the subnet is owned by
+  `network:ha_router_replicated_interface`, the owner Neutron gives to the interfaces of an HA
+  router.
+- **The router's gateway port is not visible to the project** and does not count against its
+  port quota.
+- **Security group rules scoped to a group are misreported by the CLI**, which prints
+  `0.0.0.0/0` as their source. The API returns no prefix for them. See
+  [what broke](../README.md#what-broke-and-how-it-was-fixed).
 
 ## Block storage
 
@@ -108,13 +137,20 @@ One volume type, `CEPH_1_perf1`. There is no tier to choose between.
 Nova reports `-1` for floating IPs and security groups. Neutron owns those two quotas and is
 the authoritative source; the table above uses Neutron's values.
 
-The binding constraint is **20 ports**, not the CPU or memory ceiling. Every instance, every
-router interface and every Octavia amphora consumes one, so the port budget runs out well
-before the twenty vCPUs do.
+After the network layer, 3 of the 20 ports are in use: the two DHCP ports and the router
+interface. Every instance adds at least one more. Which ceiling binds first, ports or the ten
+instances, depends on what the load balancer consumes; that is measured in the ingress step
+rather than assumed here.
 
 ## Starting state
 
-`openstack keypair list` and `openstack security group list`
+`openstack keypair list`, `openstack security group list` and
+`openstack security group rule list default`
 
 No keypairs, and the default security group only. Everything this platform runs on is created
 by the code in this repository.
+
+The default group is not Neutron's stock one. Its TCP egress is split into ports 1–24 and
+26–65535, so **outbound TCP port 25 is filtered**; UDP and ICMP egress are open, and ingress is
+allowed only from members of the group. The group this repository creates deletes Neutron's
+default rules and declares every flow itself (`delete_default_rules = true`).

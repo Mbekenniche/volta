@@ -64,7 +64,7 @@ This is the target, not the current state. See the status below for what actuall
 
 - [x] Repository foundations: secret-safe `.gitignore`, pre-commit guardrails
 - [x] OpenStack access: project, application credentials, [resource inventory](docs/platform-inventory.md)
-- [ ] Network layer: network, subnet, router, security groups, keypair
+- [x] Network layer: network, subnet, router, security groups, keypair
 - [ ] Remote state in Swift / S3, with locking
 - [ ] Compute: cluster instances, cloud-init, floating IP, Cinder volumes
 - [ ] k3s bootstrap from a single `apply`
@@ -94,9 +94,28 @@ that were rejected and why.
 
 ## What broke, and how it was fixed
 
-Nothing yet. This section grows as the project does, and it is deliberately placed above the
-feature list: how a platform fails and recovers says more about it than what it does on a good
-day.
+This section grows as the project does, and it is deliberately placed above the feature list:
+how a platform fails and recovers says more about it than what it does on a good day.
+
+**A version constraint that OpenTofu never checked.** A typo in `required_version`, the
+operator `=>`, which does not exist, passed `tofu validate` without a word. Testing the edge
+cases showed why: OpenTofu 1.12.5, the version used here, does not enforce a `required_version`
+written in a `.tf` file. Even `">= 99.0.0"`, or plain garbage, passes `init` and `plan` there,
+while the same constraint in a `.tofu` file stops the run with `Incompatible module`. The
+[documentation](https://opentofu.org/docs/language/settings/) now describes that setting as
+kept for compatibility with Terraform, and adds a `language` block for OpenTofu's own
+constraints. The configuration in [`infra/`](infra/) uses the `.tofu` extension, so its version
+constraint is enforced.
+
+**A CLI that showed the cluster's internal ports open to the internet.** After the first
+`apply`, `openstack security group rule list`, and `rule show` as well, printed `0.0.0.0/0` as
+the remote side of the six rules scoped to the security group itself: etcd, kubelet, the
+Kubernetes API, Flannel, ICMP and node-to-node egress. Neutron refuses a rule that sets both a
+remote prefix and a remote group, so the display could not be literal. The raw API response
+(`GET /v2.0/security-group-rules`) carries `remote_ip_prefix: null` for those rules, and the
+OpenTofu state agrees: nothing was exposed. The client, python-openstackclient 10.3.0, fills
+the empty field for display. Security group rules are now verified against the API response,
+not against the client's table.
 
 ## Known limitations
 
