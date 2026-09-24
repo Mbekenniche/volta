@@ -17,3 +17,11 @@ repos:
     rev: v8.30.0
     hooks:
       - id: gitleaks                  # detect credentials, tokens and API keys in the diff
+
+  - repo: local
+    hooks:
+      - id: tofu-fmt                  # rewrite OpenTofu files to the canonical style
+        name: tofu fmt
+        entry: tofu fmt               # uses the tofu binary on PATH, the one the project runs with
+        language: system
+        files: \.(tofu|tf|tfvars)$
