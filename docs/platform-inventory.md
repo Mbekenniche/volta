@@ -92,10 +92,29 @@ Four networks are visible before the project creates any of its own:
 there. The two shared networks are not external, so a router cannot use either of them as its
 gateway.
 
+### The shared networks
+
+`GET /v2.0/networks` and `GET /v2.0/subnets` on the raw API, and a probe port created then
+deleted on 2026-09-24
+
+- **`ext-net1` is public address space.** It belongs to another project and its description
+  reads "Public shared network". Seventeen of its subnets are IPv4 `/24` blocks registered to
+  Infomaniak at the RIPE NCC; the eighteenth is an IPv6 `/64`. All of them run DHCP, with
+  resolvers set by the platform.
+- **The project can attach to it directly.** The probe port was accepted, received one public
+  IPv4 and one public IPv6 address, counted against the project's port quota, and was given the
+  `default` security group, having named none.
+- **`ext-v6only1` is its IPv6-only counterpart**: a single `/64`, described as "Public shared
+  IPv6-only network".
+- **The subnets of `ext-floating1` are not visible to the project.**
+
+Why the cluster uses neither shared network is recorded in
+[ADR 0004](adr/0004-place-nodes-on-a-private-network.md).
+
 ### Measured on the network layer
 
-`openstack network show`, `openstack port list --long` and `openstack quota show --usage`, after
-the first `apply` of [`infra/`](../infra/):
+`openstack network show`, `openstack port list --long`, `openstack quota show --usage` and
+`GET /v2.0/routers` on the raw API, after the first `apply` of [`infra/`](../infra/):
 
 - **A project network gets an MTU of 1500**, not the 8950 of the external networks. An overlay
   built on top of it, such as Flannel's VXLAN in the cluster step, has to fit inside 1500 bytes.
@@ -104,6 +123,8 @@ the first `apply` of [`infra/`](../infra/):
 - **The router is highly available.** Its interface on the subnet is owned by
   `network:ha_router_replicated_interface`, the owner Neutron gives to the interfaces of an HA
   router.
+- **The router translates outbound traffic** (`enable_snat: true`) through a single address on
+  `ext-floating1`.
 - **The router's gateway port is not visible to the project** and does not count against its
   port quota.
 - **Security group rules scoped to a group are misreported by the CLI**, which prints

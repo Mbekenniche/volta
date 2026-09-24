@@ -91,6 +91,7 @@ that were rejected and why.
 | OpenTofu rather than Terraform | MPL-2.0 licensing, supported by Infomaniak's own documentation | [ADR 0001](docs/adr/0001-use-opentofu-instead-of-terraform.md) |
 | Self-managed k3s rather than managed Kubernetes | The cluster bootstrap is part of what this repository demonstrates | [ADR 0002](docs/adr/0002-run-a-self-managed-k3s-cluster.md) |
 | Application credentials rather than user passwords | Scoped, revocable, never tied to a human account | [ADR 0003](docs/adr/0003-authenticate-with-an-application-credential.md) |
+| Private network behind a router rather than the shared public network | Nothing is reachable from the internet until a floating IP says so | [ADR 0004](docs/adr/0004-place-nodes-on-a-private-network.md) |
 
 ## What broke, and how it was fixed
 
