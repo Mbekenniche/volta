@@ -1,0 +1,2 @@
+admin_cidr = "203.0.113.10/32"
+ssh_public_key_path = "/path/of/the/key.pub"
