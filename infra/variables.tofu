@@ -41,6 +41,16 @@ variable "admin_cidr" {
   }
 }
 
+variable "encryption_passphrase" {
+  type        = string
+  description = "The secret passphrase used for data encryption (minimum 16 characters)."
+  sensitive   = true
+  validation {
+    condition     = length(var.encryption_passphrase) >= 16
+    error_message = "The passphrase must be at least 16 characters long."
+  }
+}
+
 locals {
   name_prefix = "volta-${var.environment}"
 }
