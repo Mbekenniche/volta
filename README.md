@@ -54,6 +54,7 @@ flowchart TB
     kepler -->|watts per pod| obs
     velero -->|snapshots| swift
     tofu -->|provisions| cloud
+    tofu -->|encrypted state| swift
 ```
 
 This is the target, not the current state. See the status below for what actually exists.
@@ -65,7 +66,8 @@ This is the target, not the current state. See the status below for what actuall
 - [x] Repository foundations: secret-safe `.gitignore`, pre-commit guardrails
 - [x] OpenStack access: project, application credentials, [resource inventory](docs/platform-inventory.md)
 - [x] Network layer: network, subnet, router, security groups, keypair
-- [ ] Remote state in Swift / S3, with locking
+- [x] Remote state in Swift through the S3 API: encrypted, versioned, no lock
+  ([why](docs/adr/0006-store-the-state-in-swift-without-a-lock.md))
 - [ ] Compute: cluster instances, cloud-init, floating IP, Cinder volumes
 - [ ] k3s bootstrap from a single `apply`
 - [ ] Ingress and TLS: ingress-nginx, cert-manager, Let's Encrypt
@@ -93,6 +95,8 @@ that were rejected and why.
 | Application credentials rather than user passwords | Scoped, revocable, never tied to a human account | [ADR 0003](docs/adr/0003-authenticate-with-an-application-credential.md) |
 | Private network behind a router rather than the shared public network | Nothing is reachable from the internet until a floating IP says so | [ADR 0004](docs/adr/0004-place-nodes-on-a-private-network.md) |
 | Outbound traffic denied by default | Every flow a node can open is declared, and reviewed as code | [ADR 0005](docs/adr/0005-deny-outbound-traffic-by-default.md) |
+| State in Swift through the S3 API, without a lock | The platform's S3 layer refuses the conditional write a lock needs; saved plans and versioning stand in | [ADR 0006](docs/adr/0006-store-the-state-in-swift-without-a-lock.md) |
+| State and plans encrypted by OpenTofu | The state will hold an admin kubeconfig, in storage the project's credentials can read | [ADR 0007](docs/adr/0007-encrypt-the-state-and-plans.md) |
 
 ## What broke, and how it was fixed
 
@@ -119,6 +123,29 @@ OpenTofu state agrees: nothing was exposed. The client, python-openstackclient 1
 the empty field for display. Security group rules are now verified against the API response,
 not against the client's table.
 
+**A state lock the platform cannot take.** With `use_lockfile = true`, `tofu plan` failed
+before doing anything. OpenTofu takes that lock by writing an object with `If-None-Match: *`,
+and Swift 2.30.1, which serves the S3 API here, answers every conditional write with `501
+NotImplemented`: "Conditional object PUTs are not supported." The header is checked before the
+signature, so the same answer comes back for a key that does not exist, which made it possible
+to confirm without any credential. Upstream Swift accepts the header from 2.36.0. Until the
+platform runs it, the state has no lock, and
+[ADR 0006](docs/adr/0006-store-the-state-in-swift-without-a-lock.md) says what stands in.
+
+**An S3 key the automation was not allowed to create.** `openstack ec2 credentials create`,
+run with the application credential, was refused: "Using method 'application_credential' is
+not allowed for managing additional application credentials." The message matches a check
+Keystone added to S3 key creation in April 2026 (bug 2142138), because a restricted credential
+could otherwise create a key with all of its owner's rights. The key was created once with the
+account password.
+
+**A migration that restarted the state's history.** After `tofu init -migrate-state`, the state
+in Swift was at serial 1 with a new lineage, where the local one had been at serial 10. Every
+resource was there: 21 entries, and an empty plan. On the first write to an empty backend,
+OpenTofu 1.12.5 re-reads the destination, finds nothing, and resets the lineage and serial it
+had just copied (`PersistState`, `internal/states/remote/state.go`). No harm done, but it is
+worth knowing before comparing an old copy of the state with the live one.
+
 ## Known limitations
 
 - **Energy figures are estimates.** RAPL counters are not exposed inside a virtual machine, so
@@ -129,6 +156,10 @@ not against the client's table.
   is not proven: it depends on delegating the subdomain to Designate's nameservers, which is
   tested in the ingress step. Until then, the record pointing at the floating IP is maintained
   by hand.
+- **The state has no lock.** One operator, saved plans and a versioned container stand in for
+  it. That holds for a lab run by one person, and not beyond; see
+  [ADR 0006](docs/adr/0006-store-the-state-in-swift-without-a-lock.md) and the
+  [remote state runbook](docs/runbooks/remote-state.md).
 
 ## License
 
