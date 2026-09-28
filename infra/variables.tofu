@@ -10,6 +10,12 @@ variable "region" {
   description = "Target cloud region."
 }
 
+variable "external_network_name" {
+  type        = string
+  default     = "ext-floating1"
+  description = "Name of the external network for floating IPs."
+}
+
 variable "subnet_cidr" {
   type        = string
   description = "CIDR block for the subnet."
@@ -20,11 +26,6 @@ variable "subnet_cidr" {
   }
 }
 
-variable "external_network_name" {
-  type        = string
-  default     = "ext-floating1"
-  description = "Name of the external network for floating IPs."
-}
 
 variable "ssh_public_key_path" {
   type        = string

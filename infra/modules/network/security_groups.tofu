@@ -117,7 +117,7 @@ locals {
 
 
 resource "openstack_networking_secgroup_v2" "cluster" {
-  name                 = "${local.name_prefix}-secgroup"
+  name                 = "${var.name_prefix}-secgroup"
   delete_default_rules = true
 }
 

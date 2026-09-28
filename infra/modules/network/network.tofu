@@ -4,10 +4,10 @@ data "openstack_networking_network_v2" "external" {
 }
 
 resource "openstack_networking_network_v2" "cluster" {
-  name = "${local.name_prefix}-network"
+  name = "${var.name_prefix}-network"
 }
 resource "openstack_networking_subnet_v2" "cluster" {
-  name        = "${local.name_prefix}-subnet"
+  name        = "${var.name_prefix}-subnet"
   network_id  = openstack_networking_network_v2.cluster.id
   cidr        = var.subnet_cidr
   ip_version  = 4
@@ -15,7 +15,7 @@ resource "openstack_networking_subnet_v2" "cluster" {
 
 }
 resource "openstack_networking_router_v2" "cluster" {
-  name                = "${local.name_prefix}-router"
+  name                = "${var.name_prefix}-router"
   external_network_id = data.openstack_networking_network_v2.external.id
 }
 

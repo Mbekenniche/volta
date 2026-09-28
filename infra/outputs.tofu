@@ -1,16 +1,16 @@
 output "network_id" {
   description = "ID of the internal private network hosting the cluster."
-  value       = openstack_networking_network_v2.cluster.id
+  value       = module.network.network_id
 }
 
 output "subnet_id" {
   description = "Subnet the cluster nodes attach to."
-  value       = openstack_networking_subnet_v2.cluster.id
+  value       = module.network.subnet_id
 }
 
 output "security_group_id" {
   description = "ID of the security group applied to the cluster nodes."
-  value       = openstack_networking_secgroup_v2.cluster.id
+  value       = module.network.security_group_id
 }
 
 output "keypair_name" {
