@@ -6,3 +6,11 @@
 # OpenStack provider for OpenTofu both read it, so neither needs a flag.
 
 export OS_CLOUD=volta-tofu
+
+# Profile in ~/.aws/credentials holding the S3 key of the state backend.
+export AWS_PROFILE=volta-state
+
+# Passphrase of the state encryption, read from the macOS keychain rather than
+# written here. Store it once with:
+#   security add-generic-password -a "$USER" -s volta-state-passphrase -w
+export TF_VAR_encryption_passphrase="$(security find-generic-password -a "$USER" -s volta-state-passphrase -w)"
