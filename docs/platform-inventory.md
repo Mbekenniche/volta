@@ -137,6 +137,42 @@ Why the cluster uses neither shared network is recorded in
 
 One volume type, `CEPH_1_perf1`. There is no tier to choose between.
 
+## Object storage
+
+`GET /info` on the Swift endpoint, which answers without authentication, and S3 requests
+signed with a key that does not exist, so that nothing can be written. Measured on
+2026-09-24, then confirmed while moving the state there.
+
+- **Swift 2.30.1**, with the `s3api` middleware for the S3 API and `object_versioning` for
+  versioned containers.
+- **The S3 endpoint for `dc3-a` is `https://s3.pub1.infomaniak.cloud`**, the same host as
+  Swift.
+- **The signing region must be `us-east-1`.** A request signed for `dc3-a` is rejected with
+  `AuthorizationHeaderMalformed`, "the region 'dc3-a' is wrong; expecting 'us-east-1'".
+- **Conditional writes are refused.** A `PUT` carrying `If-None-Match: *` gets `501
+  NotImplemented`, "Conditional object PUTs are not supported.", before the signature is even
+  checked. The same request without that header fails on its signature (403). Upstream Swift
+  accepts `If-None-Match: *` from 2.36.0. This is why the state cannot be locked, see
+  [ADR 0006](adr/0006-store-the-state-in-swift-without-a-lock.md).
+- **Versioning works through both APIs.** A container with versioning enabled reports
+  `X-Versions-Enabled: True` on Swift and `Enabled` on S3. Its versions are listed with
+  `?versions`, and a `COPY` of an old version onto the current name restores it as a new
+  version (201), without removing the others.
+- **A private container refuses anonymous reads**, with 401.
+
+## Identity
+
+`openstack ec2 credentials create` with the application credential, and `POST /v3/ec2tokens`
+with a key that does not exist
+
+- **A restricted application credential cannot create S3 keys.** The request is refused with
+  403, "Using method 'application_credential' is not allowed for managing additional
+  application credentials." The message matches a check Keystone added to S3 key creation in
+  a fix backported to its stable branches in April 2026 (bug 2142138). Before it, a restricted
+  credential could create a key carrying every right of its owner.
+- **An S3 key can be exchanged for a Keystone token.** `/v3/ec2tokens` is exposed: an unknown
+  key gets 401, where an unknown route gets 404.
+
 ## Quotas
 
 `openstack limits show --absolute` and `openstack quota show`
