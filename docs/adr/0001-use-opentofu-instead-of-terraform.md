@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted — 2026-09-19
+Accepted — 2026-09-19. Amended — 2026-09-28: the code no longer runs on Terraform, see the
+amendment at the end.
 
 ## Context
 
@@ -54,3 +55,20 @@ API.
 Kubernetes control plane into the provisioning path. On an infrastructure whose stated goal is
 to be destroyed and rebuilt in one command, that is an extra failure domain bought for nothing:
 the cluster cannot be the thing that provisions the cluster.
+
+## Amendment — 2026-09-28
+
+The decision above says the code "must remain executable by Terraform with no edit". Two later
+changes broke that promise.
+
+- **The configuration is written in `.tofu` files.** OpenTofu 1.12.5 ignores a
+  `required_version` set in a `.tf` file and enforces it in a `.tofu` file, as the README
+  describes. Terraform only reads `.tf` files, so it sees an empty configuration.
+- **The state and plans are encrypted by OpenTofu**
+  ([ADR 0007](0007-encrypt-the-state-and-plans.md)). Terraform can neither parse the
+  `encryption` block nor read the state.
+
+The choice of OpenTofu stands. What changes is the cost of going back: renaming files is no
+longer enough, the state would first have to be decrypted through OpenTofu and the
+`encryption` block removed. The last consequence listed above, that reversing the decision is
+a single substitution of the binary name, no longer holds.
