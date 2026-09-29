@@ -32,3 +32,8 @@ moved {
   from = openstack_networking_subnet_v2.cluster
   to   = module.network.openstack_networking_subnet_v2.cluster
 }
+
+moved {
+  from = openstack_compute_keypair_v2.cluster
+  to   = module.compute.openstack_compute_keypair_v2.cluster
+}
