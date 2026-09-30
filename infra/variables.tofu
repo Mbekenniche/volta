@@ -52,6 +52,36 @@ variable "encryption_passphrase" {
   }
 }
 
+# Ubuntu 24.04 LTS Noble Numbat, built 2026-09-28. Glance rebuilds its images under the same
+# name and hides the previous build: moving to a newer one is a deliberate change here.
+variable "image_id" {
+  type        = string
+  default     = "abe3bf73-f45c-42bb-a63c-4f5cf00a62a7"
+  description = "ID of the node image. Pinned rather than looked up by name, which would replace every node at each rebuild."
+}
+
+variable "image_name" {
+  type        = string
+  default     = "Ubuntu 24.04 LTS Noble Numbat"
+  description = "Exact name of the image the pinned ID must be a build of, visible or hidden."
+}
+
+variable "node_flavor" {
+  type        = string
+  default     = "a2-ram4-disk20-perf1"
+  description = "Flavor of the cluster nodes, by name."
+}
+
+variable "node_map" {
+  type = map(string)
+  default = {
+    "1" = "dc3-a-04"
+    "2" = "dc3-a-09"
+    "3" = "dc3-a-10"
+  }
+  description = "One cluster node per entry, keyed by a stable index and placed in its own availability zone. Zones are listed literally: a lookup would move nodes when a zone is added."
+}
+
 locals {
   name_prefix = "volta-${var.environment}"
 }
