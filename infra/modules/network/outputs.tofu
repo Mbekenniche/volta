@@ -8,7 +8,12 @@ output "subnet_id" {
   value       = openstack_networking_subnet_v2.cluster.id
 }
 
-output "security_group_id" {
+output "security_group_cluster_id" {
   description = "ID of the security group applied to the cluster nodes."
   value       = openstack_networking_secgroup_v2.cluster.id
+}
+
+output "security_group_bastion_id" {
+  description = "ID of the security group applied to the bastion."
+  value       = openstack_networking_secgroup_v2.bastion.id
 }

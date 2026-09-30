@@ -8,9 +8,14 @@ output "subnet_id" {
   value       = module.network.subnet_id
 }
 
-output "security_group_id" {
+output "security_group_cluster_id" {
   description = "ID of the security group applied to the cluster nodes."
-  value       = module.network.security_group_id
+  value       = module.network.security_group_cluster_id
+}
+
+output "security_group_bastion_id" {
+  description = "ID of the security group applied to the bastion."
+  value       = module.network.security_group_bastion_id
 }
 
 output "keypair_name" {
