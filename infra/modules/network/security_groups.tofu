@@ -9,6 +9,14 @@ locals {
       remote_group   = "cluster"
       description    = "K3s Kubernetes API access between cluster nodes"
     }
+    "k3s_api_bastion" = {
+      direction      = "ingress"
+      protocol       = "tcp"
+      port_range_min = 6443
+      port_range_max = 6443
+      remote_group   = "bastion"
+      description    = "K3s Kubernetes API access from the bastion."
+    }
 
     "flannel_vxlan" = {
       direction      = "ingress"
@@ -122,6 +130,14 @@ locals {
       port_range_max = 22
       remote_group   = "cluster"
       description    = "Outbound SSH to the cluster nodes, the only way into them"
+    }
+    "k3s_cluster" = {
+      direction      = "egress"
+      protocol       = "tcp"
+      port_range_min = 6443
+      port_range_max = 6443
+      remote_group   = "cluster"
+      description    = "Outbound K3s API to the cluster nodes."
     }
     "dns_udp" = {
       direction        = "egress"
