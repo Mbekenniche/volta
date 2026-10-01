@@ -28,11 +28,13 @@ Two constraints matter more than the feature list:
 ```mermaid
 flowchart TB
     internet([Internet])
+    operator([Operator])
     git[("Git repository")]
     tofu["OpenTofu"]
 
     subgraph cloud["Infomaniak Public Cloud · region dc3-a"]
         fip["Floating IP"]
+        bastion["Bastion"]
         swift[("Swift / S3 object storage")]
 
         subgraph k3s["k3s cluster · private network"]
@@ -47,6 +49,8 @@ flowchart TB
 
     internet -->|"*.volta.koveolabs.com"| fip
     fip --> ingress
+    operator -->|SSH| bastion
+    bastion -->|SSH| k3s
     ingress --> app
     git -.->|desired state| argo
     argo -.->|reconciles| app
@@ -68,7 +72,8 @@ This is the target, not the current state. See the status below for what actuall
 - [x] Network layer: network, subnet, router, security groups, keypair
 - [x] Remote state in Swift through the S3 API: encrypted, versioned, no lock
   ([why](docs/adr/0006-store-the-state-in-swift-without-a-lock.md))
-- [ ] Compute: cluster instances, cloud-init, floating IP, Cinder volumes
+- [x] Compute: three nodes in three availability zones, reached through a bastion
+  ([how](docs/runbooks/node-access.md))
 - [ ] k3s bootstrap from a single `apply`
 - [ ] Ingress and TLS: ingress-nginx, cert-manager, Let's Encrypt
 - [ ] GitOps with Argo CD
@@ -97,6 +102,10 @@ that were rejected and why.
 | Outbound traffic denied by default | Every flow a node can open is declared, and reviewed as code | [ADR 0005](docs/adr/0005-deny-outbound-traffic-by-default.md) |
 | State in Swift through the S3 API, without a lock | The platform's S3 layer refuses the conditional write a lock needs; saved plans and versioning stand in | [ADR 0006](docs/adr/0006-store-the-state-in-swift-without-a-lock.md) |
 | State and plans encrypted by OpenTofu | The state will hold an admin kubeconfig, in storage the project's credentials can read | [ADR 0007](docs/adr/0007-encrypt-the-state-and-plans.md) |
+| Node image pinned by ID | Glance republishes images under the same name; a lookup by name would replace the cluster at each rebuild | [ADR 0008](docs/adr/0008-pin-the-node-image-by-id.md) |
+| One etcd member per availability zone | A lost zone costs one member, not the quorum, for under a millisecond of latency | [ADR 0009](docs/adr/0009-place-one-etcd-member-per-availability-zone.md) |
+| etcd on the root disk, below its latency guideline | Measured: neither the root disk nor a Ceph volume meets it, and the gap has not yet been shown to matter | [ADR 0010](docs/adr/0010-keep-etcd-on-the-root-disk.md) |
+| A bastion as the only way in | No node has a public address, and the exposed machine is not a member of the cluster | [ADR 0011](docs/adr/0011-reach-the-nodes-through-a-bastion.md) |
 
 ## What broke, and how it was fixed
 
@@ -146,6 +155,15 @@ OpenTofu 1.12.5 re-reads the destination, finds nothing, and resets the lineage 
 had just copied (`PersistState`, `internal/states/remote/state.go`). No harm done, but it is
 worth knowing before comparing an old copy of the state with the live one.
 
+**An argument the provider's schema advertised, and refused.** The nodes pin their image by ID,
+because Glance republishes its images under the same name: the Ubuntu 24.04 build of 14
+September was replaced on 28 September, and looking it up by name would have replaced the whole
+cluster at the next plan. Checking that ID failed first. The provider schema lists `id` as an
+optional argument of the `openstack_images_image_v2` data source, and `tofu validate` rejected
+it as an "Invalid or unknown key": that `id` is the field the plugin SDK adds to every data
+source, 53 of the 54 here. The pinned ID is now checked against the builds carrying the expected
+name, visible and hidden, which another data source can list.
+
 ## Known limitations
 
 - **Energy figures are estimates.** RAPL counters are not exposed inside a virtual machine, so
@@ -156,6 +174,16 @@ worth knowing before comparing an old copy of the state with the live one.
   is not proven: it depends on delegating the subdomain to Designate's nameservers, which is
   tested in the ingress step. Until then, the record pointing at the floating IP is maintained
   by hand.
+- **Administration has a single door.** The bastion is the only way to the nodes. If it fails, the
+  cluster keeps running but cannot be administered until an apply recreates it.
+- **etcd's disk is slower than etcd asks for.** Measured `fdatasync` latency at the 99th
+  percentile is 10 to 24 ms on the nodes' root disks, against a guideline of 10 ms; see
+  [ADR 0010](docs/adr/0010-keep-etcd-on-the-root-disk.md).
+- **User data is readable from inside every instance**, from a config drive the platform always
+  attaches and from the metadata service. Nothing secret goes into it.
+- **The metered cost is incomplete.** For nine hours, CloudKitty rated only the reserved part of
+  one running node, never its running part. Cost figures taken from it are a lower bound, and
+  say so; see the [inventory](docs/platform-inventory.md#cost).
 - **The state has no lock.** One operator, saved plans and a versioned container stand in for
   it. That holds for a lab run by one person, and not beyond; see
   [ADR 0006](docs/adr/0006-store-the-state-in-swift-without-a-lock.md) and the
