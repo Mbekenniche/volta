@@ -2,7 +2,8 @@
 
 What the Infomaniak Public Cloud exposes to this project, read from the API in region `dc3-a`
 with the `volta-opentofu` application credential: first on 2026-09-19, then on 2026-09-24 once
-the network layer had been built on top of it. Each section names the command that produced it.
+the network layer had been built on top of it, and on 2026-10-01 from inside the first
+instances. Each section names the command that produced it.
 Nothing here was taken from the provider's documentation without being confirmed against the
 API first.
 
@@ -47,6 +48,10 @@ Two regions are reachable with the same credential, `dc3-a` and `dc4-a`; this pr
   across failure domains.
 - **Volume and network**: one zone, `nova`.
 
+Infomaniak's documentation describes the three compute zones as having "different network
+connectivity and power inputs". That is the provider's statement; nothing here can verify it.
+Nova accepts microversions up to 2.93 in `dc3-a` and 2.96 in `dc4-a`; Cinder up to 3.70.
+
 ## Compute flavors
 
 `openstack flavor list`
@@ -57,8 +62,17 @@ Two regions are reachable with the same credential, `dc3-a` and `dc4-a`; this pr
 - RAM: 2 GB to 64 GB
 - Root disk: 20, 50 or 80 GB, or `0`
 
-A flavor ending in `-disk0` has no local root disk: the instance boots from a Cinder volume
-instead. Which of the two models this platform uses is decided when the instances are created.
+`openstack flavor list --long`
+
+- **`-perf1` flavors carry I/O limits** in their extra specs: 500 IOPS and 200 MB/s for writes
+  (`quota:disk_write_iops_sec`, `quota:disk_write_bytes_sec`), and 500 IOPS for reads. These are
+  the same figures as the volume type below. Where their root disk is stored is not documented.
+- **`-disk0` flavors carry no I/O limit of their own.** Infomaniak's documentation says their
+  disk is "the same size as the image". Whether this project can boot one from an image, or
+  only from a volume, was not tested. An earlier version of this page stated the latter as a
+  fact; it had not been checked.
+- **Infomaniak documents a `-perf2` tier**, 1,000 IOPS and 400 MB/s, available on request. It is
+  not visible to this project.
 
 ## Images
 
@@ -74,6 +88,23 @@ instead. Which of the two models this platform uses is decided when the instance
 Also present: eight `Kaas Ubuntu 2404/2604 Kube V1.30` through `V1.36` node images, two
 Infomaniak rescue images, Windows Server 2019/2022/2025, FreeBSD, OPNsense, Arch, Gentoo,
 RancherOS and CirrOS.
+
+### Images are rebuilt under the same name
+
+`GET /v2/images?os_hidden=true` on the raw API, and `openstack image show <id>`
+
+- **A rebuild replaces the visible image and hides the previous one.** The Ubuntu 24.04 image
+  visible on 2026-09-14 was replaced on 2026-09-28 at 09:02 UTC by a build with a new ID. Hidden
+  builds stay `active` and readable by their ID: on 2026-10-01 there were 46 of Ubuntu 24.04,
+  the oldest from 2024-05-22, and 768 hidden images in all.
+- **The rhythm is irregular.** Six rebuilds of Ubuntu 24.04 between 2026-07-20 and 2026-09-28,
+  nearly always on a Monday around 09:00 UTC; none between December 2025 and February 2026.
+- **The Ubuntu 24.04 image** is `qcow2`, stored in Swift, with its disk on a virtio-SCSI bus
+  (`/dev/sda` in the guest, not `/dev/vda`), the QEMU guest agent enabled, and `ubuntu` as its
+  default user.
+
+Why the nodes pin an ID rather than a name is recorded in
+[ADR 0008](adr/0008-pin-the-node-image-by-id.md).
 
 ## Networking
 
@@ -135,7 +166,19 @@ Why the cluster uses neither shared network is recorded in
 
 `openstack volume type list`
 
-One volume type, `CEPH_1_perf1`. There is no tier to choose between.
+One public volume type, `CEPH_1_perf1`, described as a "Reliable store tolerant to
+disk/server/rack failure", with 500 IOPS and 200 MB/s. The project's quotas also name
+`CEPH_1`, `CEPH_1_perf2`, `CEPH_1_perf3` and `CEPH_1_perf4`, which it cannot see or use.
+
+Measured with a 20 GiB test volume on 2026-10-01, created and deleted the same morning:
+
+- **A volume of zone `nova` attaches to an instance of zone `dc3-a-04`.**
+- **The device name Nova reports is not the guest's.** Nova announced `/dev/sdc`; the guest saw
+  the disk as `/dev/sdb`. The reliable name is `/dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_<volume
+  id>`.
+- **Synchronous writes take about 4.5 ms at the median**, as on the instances' root disks. The
+  measurement, and why etcd stays on the root disk, are in
+  [ADR 0010](adr/0010-keep-etcd-on-the-root-disk.md).
 
 ## Object storage
 
@@ -195,9 +238,61 @@ Nova reports `-1` for floating IPs and security groups. Neutron owns those two q
 the authoritative source; the table above uses Neutron's values.
 
 After the network layer, 3 of the 20 ports are in use: the two DHCP ports and the router
-interface. Every instance adds at least one more. Which ceiling binds first, ports or the ten
-instances, depends on what the load balancer consumes; that is measured in the ingress step
-rather than assumed here.
+interface. After the compute layer, 7: one for each of the four instances. A floating IP uses
+none of them. Which ceiling binds first, ports or the ten instances, depends on what the load
+balancer consumes; that is measured in the ingress step rather than assumed here.
+
+The compute layer uses 4 of 10 instances, 7 of 20 vCPUs, 14 of 64 GB of RAM, 1 of 10 floating
+IPs and no volume.
+
+## Inside an instance
+
+`openstack console log show`, then SSH into the instances, on 2026-10-01
+
+- **Every instance gets a config drive**, whether or not it is requested: Nova reports
+  `config_drive: True`, and the guest sees an `iso9660` disk labelled `config-2`. cloud-init
+  reads its data from it (`cloud-id: configdrive`).
+- **The metadata service answers as well.** The guest gets a route to `169.254.169.254` through
+  the router, and `/openstack/latest/user_data` returns the user data in clear. Anything placed
+  in user data can be read from inside the instance, two ways.
+- **The hosts are KVM on AMD EPYC-Rome processors.** The image runs kernel 6.8. A 4 GB flavor
+  shows 3,915 MB to the guest; a 20 GB root disk shows 19 GB.
+- **cloud-init finished 41 to 48 s after the instance was created** on a 2 vCPU node, and 82 to
+  84 s on a 1 vCPU instance, in two rounds.
+- **The console log carries the SSH host keys**, which is how the known hosts are built without
+  trusting a first connection. See the [node access runbook](runbooks/node-access.md).
+- **Ubuntu's packages come over plain HTTP**, from a mirror named after the zone
+  (`http://dc3-a-04.clouds.archive.ubuntu.com/ubuntu/`) and from `security.ubuntu.com`. Only
+  `snapd` asked for HTTPS.
+- **Addresses are drawn at random from the subnet's pool**: `.17`, `.251`, `.152` for the nodes,
+  then `.66`, `.219`, `.54` after a rebuild.
+
+## Cost
+
+Infomaniak's public price list, then `openstack rating dataframes get` and
+`openstack rating summary get`
+
+Prices below are excluding tax, in CHF per hour, as published on 2026-09-28. CloudKitty reports
+in ICU, at 50 ICU to the franc.
+
+| Resource | CHF per hour |
+|---|---|
+| `a1-ram2-disk20-perf1` (bastion) | 0.00640 |
+| `a2-ram4-disk20-perf1` (node) | 0.01043 |
+| `a2-ram4-disk0`, without its volume | 0.00805 |
+| Volume `CEPH_1_perf1`, per GiB | 0.00012 |
+| Floating IP, or the router's gateway | 0.00457 |
+| Load balancer | 0.0137 |
+
+- **The router's gateway is billed** like a floating IP, from the moment the router exists.
+- **CloudKitty matches the list price to the fifth decimal.** It splits an instance into two
+  hourly lines: for a node, `instance_up` at 0.40243 ICU and `instance_reserved` at 0.11890 ICU,
+  0.010427 CHF in all.
+- **CloudKitty missed part of the bill.** Over the nine hours rated by 2026-10-01 noon, one of
+  the four instances, the node in `dc3-a-10`, had no `instance_up` line at all, only its reserved
+  part, although it was running and in use. The hour from 04:00 UTC was missing for every
+  resource. The rated cost is therefore lower than the price list says, and comparing energy
+  with cost later has to allow for it.
 
 ## Starting state
 
