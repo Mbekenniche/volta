@@ -14,8 +14,11 @@ module "compute" {
   network_id                = module.network.network_id
   subnet_id                 = module.network.subnet_id
   security_group_cluster_id = module.network.security_group_cluster_id
+  security_group_bastion_id = module.network.security_group_bastion_id
   node_flavor               = var.node_flavor
+  bastion_flavor            = var.bastion_flavor
   image_id                  = var.image_id
   image_name                = var.image_name
   node_map                  = var.node_map
+  external_network_name     = var.external_network_name
 }

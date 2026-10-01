@@ -23,6 +23,11 @@ variable "security_group_cluster_id" {
   description = "ID of the cluster security group, the only group on each node port."
 }
 
+variable "security_group_bastion_id" {
+  type        = string
+  description = "ID of the bastion security group, the only group on the bastion port."
+}
+
 variable "image_id" {
   type        = string
   description = "ID of the node image, pinned because Glance rebuilds images under the same name."
@@ -38,7 +43,16 @@ variable "node_flavor" {
   description = "Name of the flavor for the cluster nodes."
 }
 
+variable "bastion_flavor" {
+  type        = string
+  description = "Name of the flavor for the bastion."
+}
+
 variable "node_map" {
   type        = map(string)
   description = "Cluster nodes, keyed by a stable index, each mapped to its availability zone."
+}
+variable "external_network_name" {
+  type        = string
+  description = "Name of the external network for floating IPs."
 }

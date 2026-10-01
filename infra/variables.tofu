@@ -72,6 +72,12 @@ variable "node_flavor" {
   description = "Flavor of the cluster nodes, by name."
 }
 
+variable "bastion_flavor" {
+  type        = string
+  default     = "a1-ram2-disk20-perf1"
+  description = "Flavor of the bastion, by name."
+}
+
 variable "node_map" {
   type = map(string)
   default = {

@@ -6,6 +6,7 @@ output "network_id" {
 output "subnet_id" {
   description = "Subnet the cluster nodes attach to."
   value       = openstack_networking_subnet_v2.cluster.id
+  depends_on  = [openstack_networking_router_interface_v2.cluster]
 }
 
 output "security_group_cluster_id" {
