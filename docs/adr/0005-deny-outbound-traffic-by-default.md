@@ -84,3 +84,38 @@ hosting, certificate authorities — sit behind content delivery networks whose 
 and change without notice. The list would be long, stale, and would fail as timeouts.
 Filtering by name is the job of an egress proxy, which is more infrastructure than this
 project needs today.
+
+## Amendment — 2026-10-01
+
+The compute step added a second group and checked the first from inside the instances.
+
+**A group for the bastion.** The bastion of [ADR 0011](0011-reach-the-nodes-through-a-bastion.md)
+does not join the cluster's group, whose rule allowing everything between members would open
+etcd, the kubelet and the Kubernetes API to it. Its own group follows the same rule as this
+record, every flow written down:
+
+| Flow | Port | Peer | Needed for |
+|---|---|---|---|
+| SSH, ICMP in | 22/TCP, ICMP | the administrator's address | The only way into the platform |
+| SSH out | 22/TCP | members of the cluster's group | Reaching the nodes |
+| DNS | 53/UDP, 53/TCP | the subnet | The resolvers on the DHCP ports, nothing beyond |
+| HTTP | 80/TCP | anywhere | Ubuntu's package repositories |
+| NTP | 123/UDP | anywhere | Time synchronisation |
+
+There is no HTTPS. Ubuntu's packages come over HTTP, from a mirror named after the zone
+(`dc3-a-04.clouds.archive.ubuntu.com`) and from `security.ubuntu.com`, and the daily update runs
+completed without it. The only process that asked for HTTPS was `snapd`, which nothing here
+uses.
+
+**The cluster's group lost its rules for the administrator.** SSH, ICMP and the Kubernetes API
+were open to the administrator's address. With no public address on any node, they led nowhere
+and were removed; SSH is now admitted from the bastion's group only.
+
+**What the outbound rules actually serve.** cloud-init does not depend on them: the platform
+attaches a config drive to every instance, and cloud-init reads its data from there. The
+metadata service answers too, over the HTTP rule, through the router: any process on a node can
+read the node's user data from it. Nothing secret goes into user data for that reason.
+
+**Rules name their peer group.** A rule with neither a prefix nor a group means any address to
+Neutron, so a misspelt group name would have opened the rule silently. Preconditions now stop
+the plan on an unknown group name, and on any rule that sets both or neither.

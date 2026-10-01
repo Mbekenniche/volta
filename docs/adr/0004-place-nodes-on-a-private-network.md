@@ -81,3 +81,23 @@ service that publishes no IPv6 address, and some of this platform's dependencies
 On 2026-09-24, `github.com`, `objects.githubusercontent.com` and `ghcr.io` had no AAAA record,
 and GitHub is where k3s publishes its releases. Working around that requires NAT64 on the
 platform, which was not verified.
+
+## Amendment — 2026-10-01
+
+The compute step added the first entry point, and settled two questions left open above.
+
+- **The platform has one public address, the bastion's.** The nodes have none. The floating IP
+  is associated with the port of a dedicated bastion rather than with a node, for the reasons in
+  [ADR 0011](0011-reach-the-nodes-through-a-bastion.md). A direct connection from the internet
+  to a node's private address times out.
+- **A floating IP does not count against the project's ports.** After the step, the project
+  uses 7 of its 20 ports: one for each of the four instances, the two DHCP ports and the
+  router's interface.
+- **Associating a floating IP needs a routed subnet.** The port's subnet has to reach the
+  external network through the router, and on an apply from scratch nothing ordered the
+  association after the router's interface. The network layer's subnet output now waits for
+  that interface, so the association does too, and a destroy removes the association first. A
+  full destroy and apply went through on 2026-10-01, in 1 min 56 s and 1 min 05 s.
+- **Addresses are drawn at random from the pool.** The nodes got `.17`, `.251` and `.152`, then
+  `.66`, `.219` and `.54` after a rebuild. Nothing in the code names an address; whatever needs
+  one reads it from the outputs.
