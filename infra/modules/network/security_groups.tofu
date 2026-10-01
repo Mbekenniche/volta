@@ -146,7 +146,7 @@ locals {
       port_range_min   = 80
       port_range_max   = 80
       remote_ip_prefix = "0.0.0.0/0"
-      description      = "Outbound HTTP for cloud-init metadata and Ubuntu repositories"
+      description      = "Outbound HTTP for Ubuntu repositories"
     }
     "ntp" = {
       direction        = "egress"
