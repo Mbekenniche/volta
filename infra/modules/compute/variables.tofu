@@ -56,3 +56,23 @@ variable "external_network_name" {
   type        = string
   description = "Name of the external network for floating IPs."
 }
+
+variable "k3s_version" {
+  type        = string
+  description = "k3s release installed on every server."
+}
+
+variable "k3s_install_script_sha256" {
+  type        = string
+  description = "SHA-256 the k3s install script must match before it runs."
+}
+
+variable "init_node" {
+  type        = string
+  description = "Key of node_map whose server initialises the cluster."
+}
+
+variable "pod_cidr" {
+  type        = string
+  description = "Pod network, shared by the k3s configuration and the metadata rule."
+}

@@ -28,7 +28,14 @@ resource "openstack_compute_instance_v2" "nodes" {
   image_id  = var.image_id
   flavor_id = data.openstack_compute_flavor_v2.node.id
   key_pair  = openstack_compute_keypair_v2.cluster.name
-  user_data = file("${path.module}/script/cloud-init-server.yaml")
+  user_data = templatefile("${path.module}/script/cloud-init-server.tftpl", {
+    is_init               = each.key == var.init_node
+    init_node_ip          = openstack_networking_port_v2.nodes[var.init_node].all_fixed_ips[0]
+    k3s_token             = random_password.k3s_token.result
+    k3s_version           = var.k3s_version
+    install_script_sha256 = var.k3s_install_script_sha256
+    pod_cidr              = var.pod_cidr
+  })
   network {
     port = openstack_networking_port_v2.nodes[each.key].id
   }

@@ -21,4 +21,8 @@ module "compute" {
   image_name                = var.image_name
   node_map                  = var.node_map
   external_network_name     = var.external_network_name
+  k3s_version               = var.k3s_version
+  k3s_install_script_sha256 = var.k3s_install_script_sha256
+  init_node                 = var.init_node
+  pod_cidr                  = var.pod_cidr
 }

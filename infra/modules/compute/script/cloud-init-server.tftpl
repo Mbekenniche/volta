@@ -1,0 +1,46 @@
+#cloud-config
+ssh_pwauth: false
+
+write_files:
+  - path: /etc/rancher/k3s/config.yaml
+    content: |
+%{ if is_init ~}
+      cluster-init: true
+%{ else ~}
+      server: "https://${init_node_ip}:6443"
+%{ endif ~}
+      token: "${k3s_token}"
+      cluster-cidr: "${pod_cidr}"
+      secrets-encryption: true
+      disable:
+      - traefik
+    permissions: '0600'
+
+  - path: /etc/volta/pod-metadata-block.nft
+    content: |
+      table inet pod_metadata_block
+      delete table inet pod_metadata_block
+      table inet pod_metadata_block {
+          chain forward {
+              type filter hook forward priority filter - 10; policy accept;
+
+              ip saddr ${pod_cidr} ip daddr 169.254.169.254 drop
+          }
+      }
+
+  - path: /etc/systemd/system/pod-metadata-block.service
+    content: |
+      [Unit]
+      Before=k3s.service
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/sbin/nft -f /etc/volta/pod-metadata-block.nft
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - systemctl daemon-reload
+  - systemctl enable --now pod-metadata-block.service
+  - curl -sfL -o /root/k3s-install.sh 'https://raw.githubusercontent.com/k3s-io/k3s/${replace(k3s_version, "+", "%2B")}/install.sh'
+  - echo "${install_script_sha256}  /root/k3s-install.sh" | sha256sum -c - && INSTALL_K3S_VERSION="${k3s_version}" sh /root/k3s-install.sh
