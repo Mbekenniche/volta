@@ -50,7 +50,7 @@ flowchart TB
     internet -->|"*.volta.koveolabs.com"| fip
     fip --> ingress
     operator -->|SSH| bastion
-    bastion -->|SSH| k3s
+    bastion -->|"SSH, API tunnel"| k3s
     ingress --> app
     git -.->|desired state| argo
     argo -.->|reconciles| app
