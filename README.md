@@ -74,7 +74,8 @@ This is the target, not the current state. See the status below for what actuall
   ([why](docs/adr/0006-store-the-state-in-swift-without-a-lock.md))
 - [x] Compute: three nodes in three availability zones, reached through a bastion
   ([how](docs/runbooks/node-access.md))
-- [ ] k3s bootstrap from a single `apply`
+- [x] k3s bootstrap from a single `apply`, the API reached through a tunnel to the bastion
+  ([how](docs/runbooks/cluster-access.md))
 - [ ] Ingress and TLS: ingress-nginx, cert-manager, Let's Encrypt
 - [ ] GitOps with Argo CD
 - [ ] Observability: Prometheus and Grafana
