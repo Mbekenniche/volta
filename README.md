@@ -107,6 +107,7 @@ that were rejected and why.
 | etcd on the root disk, below its latency guideline | Measured: neither the root disk nor a Ceph volume meets it, and the gap has not yet been shown to matter | [ADR 0010](docs/adr/0010-keep-etcd-on-the-root-disk.md) |
 | A bastion as the only way in | No node has a public address, and the exposed machine is not a member of the cluster | [ADR 0011](docs/adr/0011-reach-the-nodes-through-a-bastion.md) |
 | Join token passed in user data | The cluster forms from one apply; each server drops its pods' traffic to the metadata service, the one path to user data that needs no root | [ADR 0012](docs/adr/0012-pass-the-join-token-in-user-data.md) |
+| k3s installed by cloud-init from the release's own script | `get.k3s.io` serves a script that follows the main branch; the tagged one runs as root only if its SHA-256 matches | [ADR 0013](docs/adr/0013-install-k3s-from-cloud-init.md) |
 
 ## What broke, and how it was fixed
 
@@ -184,6 +185,10 @@ name, visible and hidden, which another data source can list.
   attaches and from the metadata service, and the servers' user data carries the cluster's join
   token. Root on a server can read the token anyway; each server drops its pods' traffic to the
   metadata service. See [ADR 0012](docs/adr/0012-pass-the-join-token-in-user-data.md).
+- **Every k3s setting is fixed when a server is created.** It lives in the user data, so changing
+  the version or any option replaces the three servers, and the cluster with them. That holds
+  while nothing lives only in the cluster; see
+  [ADR 0013](docs/adr/0013-install-k3s-from-cloud-init.md).
 - **The metered cost is incomplete.** For nine hours, CloudKitty rated only the reserved part of
   one running node, never its running part. Cost figures taken from it are a lower bound, and
   say so; see the [inventory](docs/platform-inventory.md#cost).
