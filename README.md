@@ -106,6 +106,7 @@ that were rejected and why.
 | One etcd member per availability zone | A lost zone costs one member, not the quorum, for under a millisecond of latency | [ADR 0009](docs/adr/0009-place-one-etcd-member-per-availability-zone.md) |
 | etcd on the root disk, below its latency guideline | Measured: neither the root disk nor a Ceph volume meets it, and the gap has not yet been shown to matter | [ADR 0010](docs/adr/0010-keep-etcd-on-the-root-disk.md) |
 | A bastion as the only way in | No node has a public address, and the exposed machine is not a member of the cluster | [ADR 0011](docs/adr/0011-reach-the-nodes-through-a-bastion.md) |
+| Join token passed in user data | The cluster forms from one apply; each server drops its pods' traffic to the metadata service, the one path to user data that needs no root | [ADR 0012](docs/adr/0012-pass-the-join-token-in-user-data.md) |
 
 ## What broke, and how it was fixed
 
@@ -180,7 +181,9 @@ name, visible and hidden, which another data source can list.
   percentile is 10 to 24 ms on the nodes' root disks, against a guideline of 10 ms; see
   [ADR 0010](docs/adr/0010-keep-etcd-on-the-root-disk.md).
 - **User data is readable from inside every instance**, from a config drive the platform always
-  attaches and from the metadata service. Nothing secret goes into it.
+  attaches and from the metadata service, and the servers' user data carries the cluster's join
+  token. Root on a server can read the token anyway; each server drops its pods' traffic to the
+  metadata service. See [ADR 0012](docs/adr/0012-pass-the-join-token-in-user-data.md).
 - **The metered cost is incomplete.** For nine hours, CloudKitty rated only the reserved part of
   one running node, never its running part. Cost figures taken from it are a lower bound, and
   say so; see the [inventory](docs/platform-inventory.md#cost).
