@@ -11,6 +11,12 @@ session goes through the bastion. Why is recorded in
 - The environment of the [remote state runbook](remote-state.md), to read the outputs, and
   `OS_CLOUD`, to read the console logs.
 
+## Where the files live
+
+Commands run from the root of the repository. The SSH configuration, the known hosts and a copy
+of the outputs live in `.project/ssh/`, which Git ignores: they describe one build of the
+platform, not the code.
+
 ## Build the known hosts from the console logs
 
 At first boot, cloud-init prints each instance's SSH host keys, and their fingerprints, to the
@@ -18,16 +24,16 @@ instance's console. The console log is read through the OpenStack API, authentic
 can be trusted before the first connection, rather than accepted on it.
 
 ```sh
-mkdir -p ~/.ssh/volta
-tofu -chdir=infra output -json > ~/.ssh/volta/outputs.json
+mkdir -p .project/ssh
+tofu -chdir=infra output -json > .project/ssh/outputs.json
 
 addr() {
   jq -r --arg n "$1" '
     if $n == "volta-lab-bastion" then .public_ip_bastion.value
-    else .private_ip_node.value[$n] end' ~/.ssh/volta/outputs.json
+    else .private_ip_node.value[$n] end' .project/ssh/outputs.json
 }
 
-: > ~/.ssh/volta/known_hosts
+: > .project/ssh/known_hosts
 for name in volta-lab-bastion volta-lab-server-1 volta-lab-server-2 volta-lab-server-3; do
   log=$(openstack console log show "$name")
   key=$(printf '%s\n' "$log" | sed -n '/BEGIN SSH HOST KEY KEYS/,/END SSH HOST KEY KEYS/p' \
@@ -36,7 +42,7 @@ for name in volta-lab-bastion volta-lab-server-1 volta-lab-server-2 volta-lab-se
   printf '%s\n' "$key" | ssh-keygen -lf -
   printf '%s\n' "$log" | sed -n '/BEGIN SSH HOST KEY FINGERPRINTS/,/END SSH HOST KEY FINGERPRINTS/p' \
     | grep -o 'SHA256:[A-Za-z0-9+/]* .*(ED25519)'
-  echo "$(addr "$name") $key" >> ~/.ssh/volta/known_hosts
+  echo "$(addr "$name") $key" >> .project/ssh/known_hosts
 done
 ```
 
@@ -46,14 +52,14 @@ is understood.
 
 ## SSH configuration
 
-`~/.ssh/volta/config`, with the addresses from the outputs:
+`.project/ssh/config`, with the addresses from the outputs:
 
 ```
 Host *
   User ubuntu
   IdentityFile ~/.ssh/<private key>
   IdentitiesOnly yes
-  UserKnownHostsFile ~/.ssh/volta/known_hosts
+  UserKnownHostsFile <repository>/.project/ssh/known_hosts
   StrictHostKeyChecking yes
   HostKeyAlgorithms ssh-ed25519
   ForwardAgent no
@@ -66,11 +72,13 @@ Host volta-lab-server-1
   ProxyJump volta-bastion
 ```
 
-and the same block for `volta-lab-server-2` and `volta-lab-server-3`. Then:
+and the same block for `volta-lab-server-2` and `volta-lab-server-3`. `UserKnownHostsFile` takes
+the absolute path of the repository, so that the file is found whatever the current directory.
+Then:
 
 ```sh
-ssh -F ~/.ssh/volta/config volta-bastion
-ssh -F ~/.ssh/volta/config volta-lab-server-1
+ssh -F .project/ssh/config volta-bastion
+ssh -F .project/ssh/config volta-lab-server-1
 ```
 
 With `-F`, `~/.ssh/config` is not read, and the jump to the bastion uses the same file.
@@ -86,14 +94,14 @@ With `-F`, `~/.ssh/config` is not read, and the jump to the bastion uses the sam
 ## Check that the path is the expected one
 
 ```sh
-ssh -F ~/.ssh/volta/config volta-lab-server-1 'echo $SSH_CONNECTION'
+ssh -F .project/ssh/config volta-lab-server-1 'echo $SSH_CONNECTION'
 ```
 
 The first field is the bastion's private address, not the workstation's public one: the node only
 ever sees the bastion. A direct connection that skips the bastion times out:
 
 ```sh
-ssh -F ~/.ssh/volta/config -o ProxyJump=none -o ConnectTimeout=10 volta-lab-server-1
+ssh -F .project/ssh/config -o ProxyJump=none -o ConnectTimeout=10 volta-lab-server-1
 ```
 
 ## After a destroy and apply
