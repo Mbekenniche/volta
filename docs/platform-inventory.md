@@ -265,7 +265,16 @@ IPs and no volume.
   (`http://dc3-a-04.clouds.archive.ubuntu.com/ubuntu/`) and from `security.ubuntu.com`. Only
   `snapd` asked for HTTPS.
 - **Addresses are drawn at random from the subnet's pool**: `.17`, `.251`, `.152` for the nodes,
-  then `.66`, `.219`, `.54` after a rebuild.
+  then `.66`, `.219`, `.54` after a rebuild, and `.152`, `.72`, `.212` after another on
+  2026-10-05.
+- **No energy counters reach the guest.** `/sys/class/powercap` is empty, and `rapl` is absent
+  from the processor flags in `/proc/cpuinfo`. Power drawn inside an instance can only be
+  estimated.
+- **The firewall runs on `nf_tables`.** `iptables` 1.8.10 uses the `nf_tables` backend, `nft`
+  1.0.9 is installed, and `nftables.service` is disabled; its `/etc/nftables.conf` starts with
+  `flush ruleset`.
+- **cloud-init 26.1 runs `runcmd` as one `/bin/sh` script, without `set -e`**: a failing command
+  does not stop the ones after it.
 
 ## Cost
 

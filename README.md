@@ -166,6 +166,26 @@ it as an "Invalid or unknown key": that `id` is the field the plugin SDK adds to
 source, 53 of the 54 here. The pinned ID is now checked against the builds carrying the expected
 name, visible and hidden, which another data source can list.
 
+**A firewall rule that k3s would have outranked.** The servers had to keep their pods away from
+the metadata service, which hands out the user data, join token included. The first design was a
+rule in the node's `FORWARD` chain. Reading the code of k3s's network policy controller, an
+embedded kube-router, before writing that rule showed why it would not hold: the controller
+creates a firewall chain for every pod, even when no NetworkPolicy exists, inserts into `FORWARD`,
+after its own rules, an `ACCEPT` for the traffic that passed it, and moves its own jump back to
+the top of the chain at every sync. Whether the node's rule landed before or after that `ACCEPT`
+would have depended on which started first. The rule lives in an nftables table of its own
+instead, where a `drop` stands whatever another table accepts; see
+[ADR 0012](docs/adr/0012-pass-the-join-token-in-user-data.md).
+
+**A cloud-init template that was not YAML.** The servers' cloud-init became an OpenTofu template,
+with `%{ if }` directives to tell the first server from the others. Indented like the YAML around
+them, the directives kept their leading spaces, and the template engine added them to the next
+line: the lines inside the condition came out with twice their indentation, the block meant to
+become `config.yaml` ended after two lines, and the document no longer parsed. cloud-init cannot
+apply a document that does not parse. Rendering the template with dummy values and parsing the
+result, with `yq` and then `cloud-init schema` on a node, caught it before any server was
+replaced. The directives now start at column 0.
+
 ## Known limitations
 
 - **Energy figures are estimates.** RAPL counters are not exposed inside a virtual machine, so
