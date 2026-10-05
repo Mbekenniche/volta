@@ -73,3 +73,11 @@ another service to run, for one passphrase.
 **The `external` key provider**, which runs a command to fetch the key. Viable, and the next
 step if the passphrase has to leave the environment. For now the keychain feeds a variable,
 which is easier to reason about.
+
+## Amendment — 2026-10-05
+
+The state holds the k3s join token, a `random_password` stored with its bcrypt hash, and no
+kubeconfig: the kubeconfig is fetched over SSH instead, see the amendment to
+[ADR 0002](0002-run-a-self-managed-k3s-cluster.md). The context above, and the rejected
+alternative of waiting for the cluster step, were written while a kubeconfig was expected in
+the state. Their reasoning holds for the token.

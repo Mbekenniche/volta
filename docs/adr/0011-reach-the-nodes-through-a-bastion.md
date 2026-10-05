@@ -86,3 +86,16 @@ to the administrator on each of them, to save one hop.
 
 **No entry point until the load balancer exists.** Rejected: the nodes could not be checked
 before the cluster step, and a load balancer is not an SSH entry point.
+
+## Amendment — 2026-10-05
+
+The cluster step settled how the Kubernetes API is reached: through an SSH tunnel to the
+bastion. See the [cluster access runbook](../runbooks/cluster-access.md).
+
+- **Two rules.** The bastion's group may open TCP 6443 to the cluster's group, and the cluster's
+  group admits TCP 6443 from the bastion's group alone. Neither names an address: the Neutron API
+  returns `remote_ip_prefix: null` for both.
+- **The tunnel is bound to the workstation's loopback**, `127.0.0.1:6443`. The bastion relays the
+  TCP connection; TLS runs between `kubectl` and the API server, and the bastion holds neither
+  the kubeconfig nor the join token.
+- **In the table above, the bastion's row for TCP 6443 no longer holds**: the API answers there.

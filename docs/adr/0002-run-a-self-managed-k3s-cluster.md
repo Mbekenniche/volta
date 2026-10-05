@@ -69,3 +69,20 @@ control plane certificates and a CNI to assemble by hand. On a cluster sized for
 the extra moving parts buy detail, not understanding. k3s is a CNCF-conformant distribution
 that installs from a single binary, which keeps the cloud-init readable — and readability is
 the point of writing it down.
+
+## Amendment — 2026-10-05
+
+The decision stands. One line of it does not: the kubeconfig is not surfaced as an OpenTofu
+output.
+
+- **It is read over SSH from a server**, in `/etc/rancher/k3s/k3s.yaml`, which only root can
+  read, and kept on the operator's workstation, outside the repository, mode 0600. It points at
+  `https://127.0.0.1:6443`, the local end of the tunnel through the bastion described in the
+  amendment to [ADR 0011](0011-reach-the-nodes-through-a-bastion.md). The server's certificate
+  covers that address with no extra `tls-san`. See the
+  [cluster access runbook](../runbooks/cluster-access.md).
+- **An output would have needed the cluster's admin credentials made by OpenTofu**: the keys of
+  its certificate authority, or a static admin token, passed to the servers in user data and so
+  readable from inside them, like the join token
+  ([ADR 0012](0012-pass-the-join-token-in-user-data.md)). A data source reading the file over SSH
+  during the `apply` was rejected too: on the first `apply`, the servers are not ready yet.

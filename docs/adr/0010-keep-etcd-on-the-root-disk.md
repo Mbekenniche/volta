@@ -89,3 +89,12 @@ turns every image into a volume at each creation.
 
 **The `-perf2` tier.** Available only on request, and not tested. Nothing shows that it lowers
 the median, which is where the disks already agree.
+
+## Amendment — 2026-10-05
+
+The cluster step installed etcd 3.6.14, embedded in k3s, with its timing settings unchanged: a
+100 ms heartbeat and a 1 s election timeout. etcd serves its own metrics on `127.0.0.1:2381` on
+every server, with or without k3s's `etcd-expose-metrics`, which only adds the node's address
+(k3s `pkg/etcd/etcd.go`). Among them are the duration of its write-ahead log's `fdatasync` and
+the count of leader changes. The decision is
+checked at the observability step, where Prometheus collects those metrics over time.

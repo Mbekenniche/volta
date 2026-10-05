@@ -101,7 +101,7 @@ that were rejected and why.
 | Private network behind a router rather than the shared public network | Nothing is reachable from the internet until a floating IP says so | [ADR 0004](docs/adr/0004-place-nodes-on-a-private-network.md) |
 | Outbound traffic denied by default | Every flow a node can open is declared, and reviewed as code | [ADR 0005](docs/adr/0005-deny-outbound-traffic-by-default.md) |
 | State in Swift through the S3 API, without a lock | The platform's S3 layer refuses the conditional write a lock needs; saved plans and versioning stand in | [ADR 0006](docs/adr/0006-store-the-state-in-swift-without-a-lock.md) |
-| State and plans encrypted by OpenTofu | The state will hold an admin kubeconfig, in storage the project's credentials can read | [ADR 0007](docs/adr/0007-encrypt-the-state-and-plans.md) |
+| State and plans encrypted by OpenTofu | The state holds the cluster's join token, in storage the project's credentials can read | [ADR 0007](docs/adr/0007-encrypt-the-state-and-plans.md) |
 | Node image pinned by ID | Glance republishes images under the same name; a lookup by name would replace the cluster at each rebuild | [ADR 0008](docs/adr/0008-pin-the-node-image-by-id.md) |
 | One etcd member per availability zone | A lost zone costs one member, not the quorum, for under a millisecond of latency | [ADR 0009](docs/adr/0009-place-one-etcd-member-per-availability-zone.md) |
 | etcd on the root disk, below its latency guideline | Measured: neither the root disk nor a Ceph volume meets it, and the gap has not yet been shown to matter | [ADR 0010](docs/adr/0010-keep-etcd-on-the-root-disk.md) |
