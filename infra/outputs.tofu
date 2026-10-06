@@ -24,7 +24,7 @@ output "keypair_name" {
 }
 
 output "public_ip_bastion" {
-  description = "Public address of the bastion, the only public address of the platform."
+  description = "Public address of the bastion, the only entry point for administration."
   value       = module.compute.public_ip_bastion
 }
 
@@ -32,4 +32,9 @@ output "private_ip_node" {
   description = "Private address of each cluster node, keyed by instance name."
   value       = module.compute.private_ip_node
 
+}
+
+output "public_ip_ingress" {
+  description = "Public address of the ingress, the floating IP reserved in the bootstrap stack."
+  value       = module.ingress.public_address
 }

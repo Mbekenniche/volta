@@ -4,7 +4,7 @@ output "keypair_name" {
 }
 
 output "public_ip_bastion" {
-  description = "Public address of the bastion, the only public address of the platform."
+  description = "Public address of the bastion, the only entry point for administration."
   value       = openstack_networking_floatingip_v2.bastion.address
 }
 

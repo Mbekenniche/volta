@@ -26,3 +26,10 @@ module "compute" {
   init_node                 = var.init_node
   pod_cidr                  = var.pod_cidr
 }
+
+module "ingress" {
+  source          = "./modules/ingress"
+  subnet_id       = module.network.subnet_id
+  name_prefix     = local.name_prefix
+  private_ip_node = module.compute.private_ip_node
+}

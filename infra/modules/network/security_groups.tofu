@@ -106,6 +106,22 @@ locals {
       remote_group   = "bastion"
       description    = "SSH access from the bastion"
     }
+    "amphorae_http" = {
+      direction        = "ingress"
+      protocol         = "tcp"
+      port_range_min   = 30080
+      port_range_max   = 30080
+      remote_ip_prefix = var.subnet_cidr
+      description      = "HTTP from the ingress load balancer to the Traefik node port"
+    }
+    "amphorae_https" = {
+      direction        = "ingress"
+      protocol         = "tcp"
+      port_range_min   = 30443
+      port_range_max   = 30443
+      remote_ip_prefix = var.subnet_cidr
+      description      = "HTTPS from the ingress load balancer to the Traefik node port"
+    }
   }
 
   secgroup_rules_bastion = {
