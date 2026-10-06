@@ -1,0 +1,17 @@
+deployment:
+  kind: DaemonSet
+service:
+  spec:
+    type: NodePort
+    externalTrafficPolicy: Local
+ports:
+  web:
+    nodePort: 30080
+    proxyProtocol:
+      trustedIPs: ["10.10.0.0/24"]
+  websecure:
+    nodePort: 30443
+    proxyProtocol:
+      trustedIPs: ["10.10.0.0/24"]
+ingressClass:
+  isDefaultClass: true
