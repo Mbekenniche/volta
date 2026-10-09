@@ -86,3 +86,20 @@ joining servers waited on their own.
 
 **`v1.37`, from the `latest` channel.** Rejected: `stable` is the channel k3s recommends, and the
 operator's `kubectl` 1.36 stays within the supported version skew.
+
+## Amendment — 2026-10-09
+
+The ingress step settled the fate of ServiceLB, and brought its own Traefik; see
+[ADR 0014](0014-serve-https-with-traefik-and-cert-manager.md) and
+[ADR 0015](0015-enter-through-an-octavia-load-balancer.md).
+
+- **ServiceLB is disabled**, next to Traefik (`disable: [traefik, servicelb]`). Traffic enters
+  through an Octavia load balancer, and ServiceLB would take ports 80 and 443 on every node for
+  the first `LoadBalancer` Service, such as the one the Traefik chart creates by default.
+- **The change replaced the three servers**, as the decision above foresaw, on 2026-10-05 while
+  the cluster held nothing. The cluster formed again on its own.
+- **Checked on the new servers:** a `LoadBalancer` Service created as a probe stayed `<pending>`
+  for 30 s, and no `svclb` DaemonSet appeared, where ServiceLB creates one for each such Service.
+  The probe was deleted.
+- **The Traefik bundled with k3s stays disabled.** The cluster's Traefik is installed with Helm,
+  from a pinned chart.

@@ -101,3 +101,17 @@ The compute step added the first entry point, and settled two questions left ope
 - **Addresses are drawn at random from the pool.** The nodes got `.17`, `.251` and `.152`, then
   `.66`, `.219` and `.54` after a rebuild. Nothing in the code names an address; whatever needs
   one reads it from the outputs.
+
+## Amendment — 2026-10-09
+
+The ingress step added the second entry point, and measured what the load balancer consumes.
+
+- **The second public address is on no instance.** It is associated with the VIP port of an
+  Octavia load balancer, which forwards TCP 80 and 443 to the servers' NodePorts; see
+  [ADR 0015](0015-enter-through-an-octavia-load-balancer.md). The nodes still have no public
+  address, and the bastion's is no longer the platform's only one.
+- **That address survives the cycle.** It is created in the bootstrap stack, outside the
+  platform's destroy and apply, so the DNS record that points at it is set once.
+- **The load balancer costs one port, its VIP.** Its two amphorae each have a port on the subnet,
+  but those belong to another project and do not count: 8 of the 20 ports are in use after the
+  step.

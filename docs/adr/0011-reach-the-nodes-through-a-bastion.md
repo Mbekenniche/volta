@@ -99,3 +99,15 @@ bastion. See the [cluster access runbook](../runbooks/cluster-access.md).
   TCP connection; TLS runs between `kubectl` and the API server, and the bastion holds neither
   the kubeconfig nor the join token.
 - **In the table above, the bastion's row for TCP 6443 no longer holds**: the API answers there.
+
+## Amendment — 2026-10-09
+
+The ingress step added a second public address, the load balancer's; see
+[ADR 0015](0015-enter-through-an-octavia-load-balancer.md).
+
+- **The bastion stays the only door for administration.** The load balancer listens on TCP 80
+  and 443 only, and forwards them to Traefik. SSH and the Kubernetes API are reached through the
+  bastion alone: the API is not exposed through the load balancer.
+- **Only the bastion's address changes with each rebuild.** The load balancer's lives in the
+  bootstrap stack and survived the cycle of 2026-10-09; the bastion's went from 179.237.94.161 to
+  179.237.94.205.
