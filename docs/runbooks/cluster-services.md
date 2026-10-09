@@ -37,8 +37,8 @@ openstack loadbalancer status show volta-lab-ingress
 ```
 
 Every member is expected `ONLINE`. Read it a few minutes after Traefik is up: right after a
-health monitor is created, its members show `ONLINE` for about a minute before the first checks
-have run, whether anything listens or not.
+health monitor is created, its members show `ONLINE` for about a minute, whether anything
+listens or not.
 
 ## 2. cert-manager and the issuers
 

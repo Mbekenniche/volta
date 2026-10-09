@@ -187,16 +187,29 @@ apply a document that does not parse. Rendering the template with dummy values a
 result, with `yq` and then `cloud-init schema` on a node, caught it before any server was
 replaced. The directives now start at column 0.
 
+**A load balancer that reported healthy members with nothing behind them.** Right after the
+health monitor of the 443 pool was created, before Traefik was installed, its three members
+showed `ONLINE`, while those of the 80 pool had been in `ERROR` for minutes. Nothing listened on
+that port: `ss` on a node found no socket on 30443. A minute later, they turned `ERROR` as well.
+A new monitor reports its members up for about a minute after it is created, so a green load
+balancer proves nothing until then. The members are now read minutes after Traefik starts, and
+the [cluster services runbook](docs/runbooks/cluster-services.md) says so.
+
 ## Known limitations
 
 - **Energy figures are estimates.** RAPL counters are not exposed inside a virtual machine, so
   per-pod power is derived from a model rather than read from hardware. The margin of error is
   documented alongside the dashboard rather than hidden behind it.
-- **DNS records are not yet part of the one-command flow.** The platform does expose Designate,
-  the OpenStack DNS API, so folding the wildcard record into the same `apply` looks feasible. It
-  is not proven: it depends on delegating the subdomain to Designate's nameservers, which is
-  tested in the ingress step. Until then, the record pointing at the floating IP is maintained
-  by hand.
+- **The DNS record is set by hand.** It points at the ingress's stable address, which survives
+  every rebuild, so it was set once. Folding it into the same `apply` through Designate, the
+  OpenStack DNS API, depends on delegating the subdomain to Designate's nameservers; that is left
+  to the one-command step.
+- **A new load balancer takes two applies.** On a fresh build, the first `apply` fails on the
+  health monitor of the 443 pool, with a message that blames its type; a second plan and apply
+  creates it. See [ADR 0015](docs/adr/0015-enter-through-an-octavia-load-balancer.md).
+- **The entry point is not spread across zones.** On 2026-10-09, both of the load balancer's
+  amphorae ran in the same zone, one of the cluster's three. Losing it would cost the entry point
+  as well as one etcd member.
 - **Administration has a single door.** The bastion is the only way to the nodes. If it fails, the
   cluster keeps running but cannot be administered until an apply recreates it.
 - **etcd's disk is slower than etcd asks for.** Measured `fdatasync` latency at the 99th

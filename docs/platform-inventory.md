@@ -22,8 +22,8 @@ They are not secrets, but they identify a tenancy and tell a reader nothing.
 | Glance | `image` | Base images |
 | Cinder | `volumev2`, `volumev3` | Persistent volumes |
 | Swift | `object-store` | Remote state, and Velero backups later |
-| Octavia | `load-balancer` | Ingress entry point |
-| Barbican | `key-manager` | TLS material for the load balancer |
+| Octavia | `load-balancer` | Ingress entry point: one load balancer, TCP 80 and 443 |
+| Barbican | `key-manager` | Not used: TLS ends at Traefik, inside the cluster |
 | Designate | `dns` | Candidate for managing records in the same `apply` |
 | Ceilometer, Gnocchi, CloudKitty, Aodh | `metering`, `metric`, `rating`, `alarming` | Billed cost, to compare against the energy model |
 | Heat, Heat-CFN | `orchestration`, `cloudformation` | Not used — see [ADR 0001](adr/0001-use-opentofu-instead-of-terraform.md) |
@@ -35,7 +35,8 @@ versioned Kubernetes node images.
 
 Designate answers. `openstack zone list` returns an empty list rather than an error, and the
 service has public endpoints in both regions. Whether a subdomain can be delegated to its
-nameservers is a separate question, settled in the ingress step.
+nameservers is a separate question, left to the one-command step: until then, the one wildcard
+record is set by hand, at the registrar's nameservers.
 
 ## Regions and availability zones
 
@@ -162,6 +163,28 @@ Why the cluster uses neither shared network is recorded in
   `0.0.0.0/0` as their source. The API returns no prefix for them. See
   [what broke](../README.md#what-broke-and-how-it-was-fixed).
 
+### Measured on the load balancer
+
+`openstack loadbalancer provider list`, `flavor list`, `quota show`, `status show` and
+`openstack port show`, on 2026-10-05, then after the ingress step:
+
+- **One provider, `amphora`**, and `octavia` as a deprecated alias of it. No flavor and no
+  availability zone are declared, and the project's load balancer quotas are all `-1`.
+- **A load balancer runs on two amphorae.** Each has a port on the member subnet that carries the
+  VIP as an allowed address pair; both ports belong to another project and do not count against
+  this one's quota. The VIP port does count, and shows `DOWN`: no instance binds it.
+- **The amphorae are not spread across zones.** On 2026-10-09, both ran in `dc3-a-09`.
+- **A load balancer is `ACTIVE` within about 1 min 20 s** of its creation: 1 min 18 s, then
+  1 min 19 s, as upper bounds.
+- **The amphorae reach the members from the subnet.** The node ports admit the subnet only, and
+  the members came up `ONLINE`.
+- **A new health monitor shows its members `ONLINE` for about a minute**, whether anything
+  listens or not.
+- **The first apply of a new load balancer fails on one of its two health monitors**, the one of
+  the 443 pool on both builds, with `TCP is not a valid option for type`. The other, identical,
+  goes through, and a second apply creates the first. See
+  [ADR 0015](adr/0015-enter-through-an-octavia-load-balancer.md).
+
 ## Block storage
 
 `openstack volume type list`
@@ -239,11 +262,11 @@ the authoritative source; the table above uses Neutron's values.
 
 After the network layer, 3 of the 20 ports are in use: the two DHCP ports and the router
 interface. After the compute layer, 7: one for each of the four instances. A floating IP uses
-none of them. Which ceiling binds first, ports or the ten instances, depends on what the load
-balancer consumes; that is measured in the ingress step rather than assumed here.
+none of them. After the ingress step, 8: the load balancer's VIP port. Its amphorae's ports
+belong to another project and do not count.
 
-The compute layer uses 4 of 10 instances, 7 of 20 vCPUs, 14 of 64 GB of RAM, 1 of 10 floating
-IPs and no volume.
+The platform uses 4 of 10 instances, 7 of 20 vCPUs, 14 of 64 GB of RAM, 2 of 10 floating IPs,
+the bastion's and the ingress's, and no volume. Octavia sets no limit on load balancers here.
 
 ## Inside an instance
 
@@ -294,6 +317,11 @@ in ICU, at 50 ICU to the franc.
 | Load balancer | 0.0137 |
 
 - **The router's gateway is billed** like a floating IP, from the moment the router exists.
+- **The running platform comes to 0.0651 CHF an hour**, about 1.56 a day: the bastion, three
+  nodes, the load balancer, and three addresses billed as floating IPs (the bastion's, the
+  router's gateway and the ingress's).
+- **Destroyed, it still costs about 0.11 CHF a day**, plus the state's storage: the ingress's
+  address lives in the bootstrap stack and stays allocated.
 - **CloudKitty matches the list price to the fifth decimal.** It splits an instance into two
   hourly lines: for a node, `instance_up` at 0.40243 ICU and `instance_reserved` at 0.11890 ICU,
   0.010427 CHF in all.
