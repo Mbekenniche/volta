@@ -33,12 +33,13 @@ flowchart TB
     tofu["OpenTofu"]
 
     subgraph cloud["Infomaniak Public Cloud · region dc3-a"]
-        fip["Floating IP"]
+        fip["Stable floating IP"]
+        lb["Octavia load balancer"]
         bastion["Bastion"]
         swift[("Swift / S3 object storage")]
 
         subgraph k3s["k3s cluster · private network"]
-            ingress["ingress-nginx + cert-manager"]
+            ingress["Traefik + cert-manager"]
             app["demo workload"]
             argo["Argo CD"]
             obs["Prometheus + Grafana"]
@@ -48,7 +49,8 @@ flowchart TB
     end
 
     internet -->|"*.volta.koveolabs.com"| fip
-    fip --> ingress
+    fip --> lb
+    lb -->|"PROXY protocol"| ingress
     operator -->|SSH| bastion
     bastion -->|"SSH, API tunnel"| k3s
     ingress --> app
@@ -76,7 +78,8 @@ This is the target, not the current state. See the status below for what actuall
   ([how](docs/runbooks/node-access.md))
 - [x] k3s bootstrap from a single `apply`, the API reached through a tunnel to the bastion
   ([how](docs/runbooks/cluster-access.md))
-- [ ] Ingress and TLS: ingress-nginx, cert-manager, Let's Encrypt
+- [x] Ingress and TLS: Traefik and cert-manager behind an Octavia load balancer, certificates from
+  Let's Encrypt ([how](docs/runbooks/cluster-services.md))
 - [ ] GitOps with Argo CD
 - [ ] Observability: Prometheus and Grafana
 - [ ] Backups with Velero, proven by a real restore
@@ -109,6 +112,8 @@ that were rejected and why.
 | A bastion as the only way in | No node has a public address, and the exposed machine is not a member of the cluster | [ADR 0011](docs/adr/0011-reach-the-nodes-through-a-bastion.md) |
 | Join token passed in user data | The cluster forms from one apply; each server drops its pods' traffic to the metadata service, the one path to user data that needs no root | [ADR 0012](docs/adr/0012-pass-the-join-token-in-user-data.md) |
 | k3s installed by cloud-init from the release's own script | `get.k3s.io` serves a script that follows the main branch; the tagged one runs as root only if its SHA-256 matches | [ADR 0013](docs/adr/0013-install-k3s-from-cloud-init.md) |
+| Our own Traefik and cert-manager, installed with Helm | ingress-nginx is retired, and the copy k3s bundles would tie its settings to the servers' user data | [ADR 0014](docs/adr/0014-serve-https-with-traefik-and-cert-manager.md) |
+| An Octavia load balancer on a stable address | No node gets a public address, the client's address reaches the applications, and the DNS record survives every rebuild | [ADR 0015](docs/adr/0015-enter-through-an-octavia-load-balancer.md) |
 
 ## What broke, and how it was fixed
 
