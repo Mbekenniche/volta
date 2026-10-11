@@ -103,3 +103,29 @@ The ingress step settled the fate of ServiceLB, and brought its own Traefik; see
   The probe was deleted.
 - **The Traefik bundled with k3s stays disabled.** The cluster's Traefik is installed with Helm,
   from a pinned chart.
+
+## Amendment — 2026-10-11
+
+The rebuild of 2026-10-11 showed what "k3s is relied on to wait for the first one" depends on.
+
+| Server | `k3s.service` started (UTC) | Restarts | Node `Ready` (UTC) |
+|---|---|---|---|
+| 1, `cluster-init` | 10:15:55 | 0 | 10:16:10 |
+| 2 | 10:15:46 | 2 | 10:16:41 |
+| 3 | 10:15:54 | 1 | 10:16:27 |
+
+Servers 2 and 3 started k3s before the first server listened, and both exited at once:
+`failed to validate token: failed to get CA certs: Get "https://10.10.0.238:6443/cacerts": dial
+tcp 10.10.0.238:6443: connect: connection refused`. systemd started them again, and they joined
+31 and 17 s after the first server was ready, with no intervention.
+
+- **k3s waits inside its own process only once the first server answers.** On 2026-10-02, server 2
+  started two seconds after it, and no server restarted. Before it answers, k3s exits, and the
+  waiting is done by systemd restarting the service. The decision holds: no ordering between the
+  servers. It rests on both behaviours.
+- **cloud-init reports `error` on a healthy cluster.** The installation script starts the service
+  and fails when that first start fails, so the `runcmd` script fails with it: `cloud-init status`
+  read `error` on servers 2 and 3 while k3s ran and both nodes were `Ready`. A node's state is read
+  from the cluster, not from cloud-init.
+- **The cluster's Traefik is now delivered by Argo CD**, no longer installed with Helm; see
+  [ADR 0016](0016-deliver-the-cluster-services-with-argo-cd.md).

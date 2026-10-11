@@ -85,3 +85,23 @@ reason.
 
 **A wildcard certificate through DNS-01.** Rejected above: a DNS API token in the cluster, to
 save one certificate per application.
+
+## Amendment — 2026-10-11
+
+The GitOps step changed how these services are installed, not what they are; see
+[ADR 0016](0016-deliver-the-cluster-services-with-argo-cd.md).
+
+- **Argo CD installs them now**, from the same pinned charts and the same values files. The Helm
+  commands left the runbook, and "the installation is manual for now" no longer holds: after a
+  rebuild, Argo CD brings them back.
+- **The issuers moved to `cluster/cert-manager/issuers/`**, alone in their directory. Argo CD
+  applies every YAML file of a directory as a manifest, and the chart's values file is not one.
+- **Traefik publishes the stable address on every `Ingress`**, through
+  `providers.kubernetesIngress.ingressEndpoint.ip`, with `publishedService` disabled. Until then,
+  Traefik copied the status of its own Service, a `NodePort` with no address, and every `Ingress`
+  carried an empty status, which Argo CD reports as never healthy. With `publishedService` left on,
+  `helm template` passed both settings to Traefik. Checked on 2026-10-11: the demo's `Ingress`
+  carries `179.237.92.39`. The address is now written on both sides of the line drawn in
+  [ADR 0017](0017-draw-the-line-between-opentofu-and-argo-cd.md).
+- **On the fresh cluster of 2026-10-11**, the demo's production certificate was `Ready` 95 s after
+  its `Ingress` was created, one sample, against 35 s on the fresh cluster of 2026-10-09.
