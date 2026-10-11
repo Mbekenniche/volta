@@ -11,6 +11,7 @@ metadata:
   labels:
     name:  whoami
 spec:
+  replicas: 1
   selector:
     matchLabels:
       app: whoami
@@ -25,6 +26,7 @@ spec:
         ports:
         - containerPort:  80
           name:  http
+
       restartPolicy: Always
 ---
 kind: Service
