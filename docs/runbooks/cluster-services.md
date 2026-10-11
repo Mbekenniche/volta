@@ -1,9 +1,11 @@
 # Cluster services
 
-How to install the services that make the cluster reachable over HTTPS: Traefik, cert-manager
-with its two issuers, and the demo app. They are installed by hand from the workstation, with
-Helm and `kubectl`, from the values and manifests under `cluster/`. On a fresh cluster, after a
-destroy and apply, this runbook is played from the top.
+How the services inside the cluster come to run: Argo CD, installed with Helm, then an app of
+apps that brings Traefik, cert-manager with its two issuers, and the demo application from this
+repository. On a fresh cluster, after a destroy and apply, this runbook is played from the top;
+after that, every change goes through Git. Why it works this way is recorded in
+[ADR 0016](../adr/0016-deliver-the-cluster-services-with-argo-cd.md) and
+[ADR 0017](../adr/0017-draw-the-line-between-opentofu-and-argo-cd.md).
 
 ## What it takes
 
@@ -11,6 +13,7 @@ destroy and apply, this runbook is played from the top.
 - Helm and `kubectl` on the workstation.
 - The infrastructure applied: the load balancer, its stable public address, and the DNS record
   `*.volta.koveolabs.com` pointing at that address. None of them changes across a cycle.
+- The repository pushed: Argo CD reads `main` on GitHub, not the workstation's copy.
 
 Commands run from the root of the repository, with the cluster's kubeconfig:
 
@@ -18,52 +21,68 @@ Commands run from the root of the repository, with the cluster's kubeconfig:
 export KUBECONFIG=~/.kube/volta-lab.yaml
 ```
 
-## 1. Traefik
+## 1. Argo CD
 
 ```sh
-helm upgrade --install traefik oci://ghcr.io/traefik/helm/traefik --version 41.6.1 \
-  -n traefik --create-namespace -f cluster/traefik/values.yaml
-kubectl -n traefik rollout status ds/traefik
+helm upgrade --install argocd oci://ghcr.io/argoproj/argo-helm/argo-cd --version 10.10.2 \
+  -n argocd --create-namespace -f cluster/argocd/values.yaml
+kubectl -n argocd get pods
 ```
 
-One Traefik per server, behind the NodePorts 30080 and 30443 that the load balancer targets.
-Traefik comes first because the demo needs what its chart brings: the `traefik` IngressClass and
-the `Middleware` resource type.
+- **Every pod is expected `Running`.** On 2026-10-11, they were all ready a minute after the
+  installation.
+- **The release is named `argocd`**, which names its objects: `argocd-server`,
+  `argocd-repo-server`, `argocd-application-controller`.
+- **It is the only Helm release on the cluster.** The same command upgrades Argo CD.
 
-Then check that the load balancer sees it, with `OS_CLOUD` set:
+## 2. The root Application
+
+```sh
+kubectl apply -f cluster/argocd/root.yaml
+```
+
+- **It is the only `Application` applied by hand.** It reads [`cluster/apps/`](../../cluster/apps/)
+  on `main`, where each file is an `Application`, and creates them.
+- **The root does not sync by itself.** Sync it from Argo CD's interface (section 3): open
+  `app-of-apps` and press Sync. Its children then sync on their own. A file added to or removed
+  from `cluster/apps/` also waits for a sync of the root.
+- **The children come in sync waves**: Traefik and cert-manager first, then the issuers, once
+  cert-manager's webhook answers, then the demo, whose `Ingress` needs Traefik's `Middleware`
+  type and an issuer.
+
+```sh
+kubectl -n argocd get applications
+```
+
+The five `Application` resources are expected `Synced` and `Healthy`. On 2026-10-11, the demo's
+production certificate was `Ready` two minutes after the root's sync started.
+
+## 3. Argo CD's interface
+
+```sh
+kubectl -n argocd port-forward svc/argocd-server 8080:443
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
+```
+
+- **The port-forward runs in a terminal of its own**, left open. The interface is then on
+  `https://localhost:8080`, behind a self-signed certificate the browser warns about.
+- **The account is `admin`**, with the password the second command prints. It never goes into the
+  repository, a conversation or a ticket. Each fresh cluster generates a new one.
+- **Argo CD is not exposed on the Internet.** The port-forward goes through the tunnel: when the
+  tunnel drops, so does the interface. Argo CD itself keeps working; it runs in the cluster and
+  reads GitHub on its own.
+
+## 4. Checks
+
+With `OS_CLOUD` set:
 
 ```sh
 openstack loadbalancer status show volta-lab-ingress
 ```
 
 Every member is expected `ONLINE`. Read it a few minutes after Traefik is up: right after a
-health monitor is created, its members show `ONLINE` for about a minute, whether anything
-listens or not.
-
-## 2. cert-manager and the issuers
-
-```sh
-helm upgrade --install cert-manager oci://quay.io/jetstack/charts/cert-manager --version v1.21.2 \
-  -n cert-manager --create-namespace -f cluster/cert-manager/values.yaml
-kubectl -n cert-manager rollout status deploy/cert-manager-webhook
-kubectl apply -f cluster/cert-manager/cluster-issuers.yaml
-kubectl get clusterissuer
-```
-
-- **Wait for the webhook.** It validates every cert-manager resource; the issuers sent before it
-  answers are refused.
-- **Both issuers are expected `Ready`**: each has registered an ACME account with Let's Encrypt,
-  whose key cert-manager keeps in a Secret of the `cert-manager` namespace. A fresh cluster
-  registers new accounts.
-
-## 3. The demo app
-
-```sh
-kubectl apply -f cluster/demo/whoami.yaml
-kubectl -n demo get certificate whoami-tls
-```
-
-The certificate is expected `Ready` within a minute. Then, from the workstation:
+health monitor is created, its members show `ONLINE` for about a minute, whether anything listens
+or not.
 
 ```sh
 curl -sv https://demo.volta.koveolabs.com/
@@ -75,21 +94,37 @@ curl -sv https://demo.volta.koveolabs.com/
   this one shows that the client address crossed the load balancer.
 - **`http://demo.volta.koveolabs.com/` answers a 301** to the same path over HTTPS.
 
-## Certificates and their limit
+## Changing a component
 
-The demo asks the production issuer. Let's Encrypt issues at most five certificates per week for
-the same set of names, and every fresh cluster asks for a new one. To experiment, point the
-Ingress at `letsencrypt-staging` (annotation `cert-manager.io/cluster-issuer`) and apply again;
-cert-manager issues a new certificate whenever the issuer changes, and the staging one is not
-trusted by browsers.
+- **Edit the files under `cluster/`, commit, push to `main`.** Argo CD polls the repository every
+  two to three minutes and applies what changed. Nothing runs from the workstation.
+- **No `helm` and no `kubectl apply` on a component Argo CD manages.** A change made by hand to a
+  field the manifest declares is undone. A field the manifest leaves out is not watched at all.
+- **Going back is a `git revert`, pushed.** The interface's Rollback is unavailable while
+  automated sync is on.
+- **Removing a file from `cluster/apps/` removes the component**, and every object it created.
+  cert-manager's CRDs stay, and the certificates with them; Traefik's go, and every `Middleware`
+  with them.
 
 ## Upgrades
 
-The same commands, with the new `--version` and the values reviewed against the new chart:
+- **A chart**: its version is the chart source's `targetRevision` in `cluster/apps/`. Review the
+  values against the new chart before pushing:
 
-```sh
-helm show values oci://ghcr.io/traefik/helm/traefik --version <version>
-```
+  ```sh
+  helm show values oci://ghcr.io/traefik/helm/traefik --version <version>
+  ```
 
-A values file with an unknown key is refused by both charts' schemas, but a key written twice is
-not: Helm keeps the last one silently. The `check-yaml` hook catches the second case at commit.
+  A values file with an unknown key is refused by both charts' schemas, but a key written twice
+  is not: Helm keeps the last one silently. The `check-yaml` hook catches the second case at
+  commit.
+- **Argo CD**: the command of section 1, with the new `--version`. Its values file is applied only
+  then; Argo CD does not reconcile it.
+
+## Certificates and their limit
+
+The demo asks the production issuer. Let's Encrypt issues at most five certificates per week for
+the same set of names, and every fresh cluster asks for a new one. To experiment, point the demo's
+`Ingress` at `letsencrypt-staging` (annotation `cert-manager.io/cluster-issuer`) and push;
+cert-manager issues a new certificate whenever the issuer changes, and the staging one is not
+trusted by browsers.
