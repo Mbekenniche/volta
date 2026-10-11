@@ -55,6 +55,7 @@ flowchart TB
     bastion -->|"SSH, API tunnel"| k3s
     ingress --> app
     git -.->|desired state| argo
+    argo -.->|reconciles| ingress
     argo -.->|reconciles| app
     argo -.->|reconciles| obs
     kepler -->|watts per pod| obs
@@ -80,7 +81,8 @@ This is the target, not the current state. See the status below for what actuall
   ([how](docs/runbooks/cluster-access.md))
 - [x] Ingress and TLS: Traefik and cert-manager behind an Octavia load balancer, certificates from
   Let's Encrypt ([how](docs/runbooks/cluster-services.md))
-- [ ] GitOps with Argo CD
+- [x] GitOps with Argo CD: an app of apps delivers every service in the cluster from this
+  repository ([how](docs/runbooks/cluster-services.md))
 - [ ] Observability: Prometheus and Grafana
 - [ ] Backups with Velero, proven by a real restore
 - [ ] One-command lifecycle and CI
@@ -112,8 +114,10 @@ that were rejected and why.
 | A bastion as the only way in | No node has a public address, and the exposed machine is not a member of the cluster | [ADR 0011](docs/adr/0011-reach-the-nodes-through-a-bastion.md) |
 | Join token passed in user data | The cluster forms from one apply; each server drops its pods' traffic to the metadata service, the one path to user data that needs no root | [ADR 0012](docs/adr/0012-pass-the-join-token-in-user-data.md) |
 | k3s installed by cloud-init from the release's own script | `get.k3s.io` serves a script that follows the main branch; the tagged one runs as root only if its SHA-256 matches | [ADR 0013](docs/adr/0013-install-k3s-from-cloud-init.md) |
-| Our own Traefik and cert-manager, installed with Helm | ingress-nginx is retired, and the copy k3s bundles would tie its settings to the servers' user data | [ADR 0014](docs/adr/0014-serve-https-with-traefik-and-cert-manager.md) |
+| Our own Traefik and cert-manager | ingress-nginx is retired, and the copy k3s bundles would tie its settings to the servers' user data | [ADR 0014](docs/adr/0014-serve-https-with-traefik-and-cert-manager.md) |
 | An Octavia load balancer on a stable address | No node gets a public address, the client's address reaches the applications, and the DNS record survives every rebuild | [ADR 0015](docs/adr/0015-enter-through-an-octavia-load-balancer.md) |
+| Argo CD as an app of apps, installed with Helm | Git becomes the way to change what runs in the cluster; Argo CD cannot install itself, and does not manage itself | [ADR 0016](docs/adr/0016-deliver-the-cluster-services-with-argo-cd.md) |
+| OpenTofu outside the cluster, Argo CD inside | Every resource has one owner, and the four values that cross the line are listed in one place | [ADR 0017](docs/adr/0017-draw-the-line-between-opentofu-and-argo-cd.md) |
 
 ## What broke, and how it was fixed
 
