@@ -200,6 +200,32 @@ A new monitor reports its members up for about a minute after it is created, so 
 balancer proves nothing until then. The members are now read minutes after Traefik starts, and
 the [cluster services runbook](docs/runbooks/cluster-services.md) says so.
 
+**An application that would never turn healthy.** Once Argo CD delivered the demo, the site
+answered and its certificate was issued, yet Argo CD kept reporting the demo as progressing, and
+the root application with it. The `Ingress` was the holdout: Argo CD calls an `Ingress` healthy only
+once its status carries an address, and this one carried none. Traefik fills that status by
+copying its own Service's, and its Service is a `NodePort`, with no address to copy: the address
+lives on the Octavia load balancer, outside the cluster. Traefik now publishes the stable public
+address itself (`ingressEndpoint.ip`), with the copy disabled; left on, both settings reached
+Traefik. The demo turned healthy, and the address joined the values written on both sides of the
+line between OpenTofu and Argo CD; see [ADR 0017](docs/adr/0017-draw-the-line-between-opentofu-and-argo-cd.md).
+
+**A self-healing cluster that left a manual change in place.** Scaled by hand to three replicas,
+the demo stayed at three for minutes, with self-healing on. Its Deployment did not declare a
+replica count: Kubernetes had filled one in, and Argo CD enforces only what the manifest declares.
+Its own best practices leave `replicas` out of Git on purpose, when an autoscaler owns it. Nothing
+in Git contradicted three replicas, so there was nothing to heal. The manifest now declares one,
+and the same command is undone.
+
+**A cloud-init error on a healthy cluster.** After the rebuild of 2026-10-11, `cloud-init status`
+read `error` on two of the three servers, while all three nodes were `Ready`. Both had started k3s
+a few seconds before the first server listened, and k3s exited at once: "failed to get CA certs
+… connection refused". The installation script, which starts the service, failed with it, and so
+did cloud-init's `runcmd`. systemd restarted k3s, and the two servers joined 17 and 31 s after the
+first one was ready. On the build measured on 2026-10-02, the joining server had started two
+seconds after the first, and nothing restarted. A node's state is now read from the cluster, not
+from cloud-init; see the amendment to [ADR 0013](docs/adr/0013-install-k3s-from-cloud-init.md).
+
 ## Known limitations
 
 - **Energy figures are estimates.** RAPL counters are not exposed inside a virtual machine, so
@@ -231,6 +257,15 @@ the [cluster services runbook](docs/runbooks/cluster-services.md) says so.
 - **The metered cost is incomplete.** For nine hours, CloudKitty rated only the reserved part of
   one running node, never its running part. Cost figures taken from it are a lower bound, and
   say so; see the [inventory](docs/platform-inventory.md#cost).
+- **Argo CD sits outside its own reconciliation.** Helm installs it, and its values in Git are
+  applied when Helm runs again, not when they are pushed; the two can disagree without notice. See
+  [ADR 0016](docs/adr/0016-deliver-the-cluster-services-with-argo-cd.md).
+- **Changes arrive by polling.** Argo CD is not exposed, so GitHub cannot notify it: a pushed
+  change takes up to three minutes to land.
+- **A rebuild needs five services on the Internet.** GitHub, `ghcr.io`, `quay.io`, `docker.io` and
+  `ecr-public.aws.com` serve the manifests, charts, images and k3s's installation script. A
+  running cluster does not need them to keep serving; see
+  [ADR 0017](docs/adr/0017-draw-the-line-between-opentofu-and-argo-cd.md).
 - **The state has no lock.** One operator, saved plans and a versioned container stand in for
   it. That holds for a lab run by one person, and not beyond; see
   [ADR 0006](docs/adr/0006-store-the-state-in-swift-without-a-lock.md) and the
