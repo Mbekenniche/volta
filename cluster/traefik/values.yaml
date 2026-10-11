@@ -15,3 +15,10 @@ ports:
       trustedIPs: ["10.10.0.0/24"]
 ingressClass:
   isDefaultClass: true
+
+providers:
+  kubernetesIngress:
+    ingressEndpoint:
+      ip: 179.237.92.39
+    publishedService:
+      enabled: false
