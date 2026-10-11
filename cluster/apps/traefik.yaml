@@ -1,0 +1,32 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: traefik
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  sources:
+  - repoURL: 'ghcr.io/traefik/helm'
+    chart: traefik
+    targetRevision: 41.6.1
+    helm:
+      valueFiles:
+      -  $values/cluster/traefik/values.yaml
+  - repoURL: 'https://github.com/Mbekenniche/volta.git'
+    targetRevision: main
+    ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: traefik
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 5
+    syncOptions:
+      - CreateNamespace=true
