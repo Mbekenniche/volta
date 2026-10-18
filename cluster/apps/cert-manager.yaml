@@ -17,7 +17,7 @@ spec:
       valueFiles:
       -  $values/cluster/cert-manager/values.yaml
   - repoURL: 'https://github.com/Mbekenniche/volta.git'
-    targetRevision: main
+    targetRevision: feat/observability
     ref: values
   destination:
     server: https://kubernetes.default.svc

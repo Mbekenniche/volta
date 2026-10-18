@@ -12,7 +12,7 @@ spec:
   sources:
   - repoURL: 'https://github.com/Mbekenniche/volta.git'
     path: cluster/demo
-    targetRevision: main
+    targetRevision: feat/observability
   destination:
     server: https://kubernetes.default.svc
   syncPolicy:

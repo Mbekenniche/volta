@@ -59,7 +59,7 @@ metadata:
   name: whoami
   namespace: demo
   annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-production
+    cert-manager.io/cluster-issuer: letsencrypt-staging
     traefik.ingress.kubernetes.io/router.middlewares: demo-redirect-https@kubernetescrd
 spec:
   ingressClassName: traefik
