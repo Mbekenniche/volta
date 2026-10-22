@@ -1,0 +1,35 @@
+alertmanager:
+  enabled: false
+
+grafana:
+  admin:
+    existingSecret: grafana-admin
+prometheusOperator:
+  admissionWebhooks:
+    certManager:
+      enabled: true
+
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy :
+  enabled: false
+
+kubeEtcd:
+  service:
+    enabled: false
+  serviceMonitor:
+    enabled: false
+prometheus:
+  prometheusSpec:
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: "csi-cinder-sc-delete"
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 10Gi
+    retentionSize: "8GiB"
