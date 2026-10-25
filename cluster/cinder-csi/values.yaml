@@ -1,0 +1,8 @@
+secret:
+  enabled: true
+  create: false
+  name: cinder-csi-cloud-config
+csi:
+  provisioner:
+    topology: "false"
+clusterID: volta-lab
