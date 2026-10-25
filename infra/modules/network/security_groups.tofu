@@ -53,6 +53,14 @@ locals {
       remote_group = "cluster"
       description  = "ICMP ping between cluster nodes"
     }
+    "node-exporter_cluster" = {
+      direction      = "ingress"
+      protocol       = "tcp"
+      port_range_min = 9100
+      port_range_max = 9100
+      remote_group   = "cluster"
+      description    = "node-exporter between cluster nodes"
+    }
 
     "dns_udp" = {
       direction        = "egress"
