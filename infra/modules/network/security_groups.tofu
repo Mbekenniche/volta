@@ -122,6 +122,14 @@ locals {
       remote_ip_prefix = var.subnet_cidr
       description      = "HTTPS from the ingress load balancer to the Traefik node port"
     }
+    "etcd_tcp" = {
+      direction        = "ingress"
+      protocol         = "tcp"
+      port_range_min   = 2381
+      port_range_max   = 2381
+      remote_ip_prefix = var.subnet_cidr
+      description      = "etcd metrics on the node address, scraped by Prometheus"
+    }
   }
 
   secgroup_rules_bastion = {

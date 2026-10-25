@@ -12,6 +12,7 @@ write_files:
       token: "${k3s_token}"
       cluster-cidr: "${pod_cidr}"
       secrets-encryption: true
+      etcd-expose-metrics: true
       disable:
       - traefik
       - servicelb
