@@ -20,6 +20,13 @@ resource "openstack_objectstorage_container_v1" "tfstate" {
   }
 }
 
+resource "openstack_objectstorage_container_v1" "velero" {
+  name = "volta-lab-velero"
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
 resource "openstack_networking_floatingip_v2" "ingress" {
   pool        = "ext-floating1"
   tags        = ["volta-ingress"]
