@@ -1,0 +1,32 @@
+upgradeCRDs: false
+snapshotsEnabled: false
+credentials:
+  existingSecret: velero-credentials
+initContainers:
+  - name: init-s3
+    image: velero/velero-plugin-for-aws:v1.14.4
+    volumeMounts:
+    - name: plugins
+      mountPath: /target
+
+configuration:
+  backupStorageLocation:
+    - name: default
+      default: true
+      provider: aws
+      bucket: volta-lab-velero
+      config:
+        region: us-east-1
+        s3ForcePathStyle: "true"
+        s3Url: https://s3.pub1.infomaniak.cloud
+        checksumAlgorithm: ""
+
+deployNodeAgent: true
+schedules:
+  mybackup:
+    schedule: "0 3 * * *"
+    template:
+      includedNamespaces: [monitoring]
+      excludedNamespaceScopedResources: [secrets, certificaterequests.cert-manager.io]
+      defaultVolumesToFsBackup: true
+      ttl: 168h
