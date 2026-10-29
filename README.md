@@ -1,29 +1,21 @@
 # volta
 
-A reproducible Kubernetes platform on the Infomaniak Public Cloud (OpenStack), provisioned end
-to end with OpenTofu, then instrumented to measure the energy draw and carbon footprint of the
-workloads it runs.
+A Kubernetes platform on the Infomaniak Public Cloud (OpenStack), built, destroyed and rebuilt from
+code, then instrumented to show what each workload costs in watts, grams of CO2 and money.
 
-## The problem
+## Why
 
-Cloud infrastructure hides its physical cost. A pod drawing 40 W looks exactly like a pod
-drawing 4 W: same dashboard, same green checkmark, same invoice line buried in an aggregate.
-Capacity ends up sized by intuition, and "we should optimise this" stays an opinion, because
-the thing being optimised is never measured.
+In the cloud, a pod drawing 40 W looks exactly like one drawing 4 W. volta builds a complete
+platform from nothing, then adds the signal most platforms lack: energy and carbon per workload,
+shown next to what it costs.
 
-volta closes that gap on a small scale. It builds a complete platform from nothing — network,
-instances, storage, cluster, GitOps, ingress, TLS, backups, observability — and then adds the
-signal most platforms lack: watts and grams of CO2eq attributed per workload, shown next to
-what those workloads actually cost.
+Two rules hold the project together:
 
-Two constraints matter more than the feature list:
+- **One command builds it, one destroys it.** A step that cannot survive a full rebuild is not done.
+- **Every figure states its margin of error.** Inside a virtual machine, power is estimated, never
+  read from hardware, and the repository says so.
 
-- **Everything is destroyed and rebuilt with a single command.** A step that cannot survive a
-  full `destroy` / `apply` cycle is not finished.
-- **Every measurement states its own margin of error.** Energy figures taken inside a virtual
-  machine are estimates, and this repository says so wherever it reports one.
-
-## Target architecture
+## Architecture
 
 ```mermaid
 flowchart TB
@@ -64,216 +56,58 @@ flowchart TB
     tofu -->|encrypted state| swift
 ```
 
-This is the target, not the current state. See the status below for what actually exists.
+The target, not yet the current state: see the status below.
+
+## Stack
+
+| Layer | Tools |
+|---|---|
+| Cloud | OpenStack on Infomaniak: Nova, Neutron, Octavia, Cinder, Swift |
+| Infrastructure as code | OpenTofu and cloud-init; state in Swift through S3, encrypted |
+| Kubernetes | k3s, three servers across three availability zones, embedded etcd |
+| Ingress | Octavia load balancer on a stable address, Traefik, cert-manager, Let's Encrypt |
+| Delivery | Argo CD as an app of apps, Helm charts |
+| Observability | Prometheus, Grafana, Cinder CSI volumes *(in progress)* |
+| Backups | Velero to Swift *(in progress)* |
+| Energy and carbon | Per-pod power estimates, Prometheus rules, Grafana *(planned)* |
 
 ## Status
 
 **Phase 1 — the platform**
 
-- [x] Repository foundations: secret-safe `.gitignore`, pre-commit guardrails
-- [x] OpenStack access: project, application credentials, [resource inventory](docs/platform-inventory.md)
-- [x] Network layer: network, subnet, router, security groups, keypair
-- [x] Remote state in Swift through the S3 API: encrypted, versioned, no lock
-  ([why](docs/adr/0006-store-the-state-in-swift-without-a-lock.md))
-- [x] Compute: three nodes in three availability zones, reached through a bastion
-  ([how](docs/runbooks/node-access.md))
-- [x] k3s bootstrap from a single `apply`, the API reached through a tunnel to the bastion
-  ([how](docs/runbooks/cluster-access.md))
-- [x] Ingress and TLS: Traefik and cert-manager behind an Octavia load balancer, certificates from
-  Let's Encrypt ([how](docs/runbooks/cluster-services.md))
-- [x] GitOps with Argo CD: an app of apps delivers every service in the cluster from this
-  repository ([how](docs/runbooks/cluster-services.md))
-- [ ] Observability: Prometheus and Grafana
-- [ ] Backups with Velero, proven by a real restore
+- [x] Private network, encrypted remote state, three nodes behind a bastion
+- [x] k3s from a single `apply`
+- [x] HTTPS through an Octavia load balancer: Traefik, cert-manager, Let's Encrypt
+- [x] GitOps: Argo CD delivers everything in the cluster from this repository
+- [ ] Observability: Prometheus and Grafana *(in progress)*
+- [ ] Backups, proven by a real restore *(in progress)*
 - [ ] One-command lifecycle and CI
 
 **Phase 2 — energy and carbon**
 
-- [ ] Per-pod power instrumentation scraped by Prometheus
-- [ ] Carbon model: emission factor, PUE, recording rules
-- [ ] Grafana dashboard: energy and cost per workload, provisioned as code
-- [ ] One optimisation, measured before and after
+- [ ] Power per pod, a carbon model, dashboards as code, and one optimisation measured before and after
 
-## Technical decisions
+## A few things that broke
 
-Each significant decision is recorded as an ADR in [`docs/adr/`](docs/adr/), with the options
-that were rejected and why.
+- The OpenStack CLI showed etcd and the Kubernetes API open to the internet; the raw API said
+  otherwise. [Read](docs/what-broke.md#a-cli-that-showed-the-clusters-internal-ports-open-to-the-internet)
+- Swift refuses the conditional write a state lock needs, so the state has no lock, and the
+  repository says what stands in for it. [Read](docs/what-broke.md#a-state-lock-the-platform-cannot-take)
+- A firewall rule on the nodes would have lost to k3s's own, depending on which started first.
+  [Read](docs/what-broke.md#a-firewall-rule-that-k3s-would-have-outranked)
+- Argo CD's self-healing left a manual `scale` in place: the manifest never declared a replica
+  count. [Read](docs/what-broke.md#a-self-healing-cluster-that-left-a-manual-change-in-place)
 
-| Decision | Rationale | Record |
-|---|---|---|
-| OpenTofu rather than Terraform | MPL-2.0 licensing, supported by Infomaniak's own documentation | [ADR 0001](docs/adr/0001-use-opentofu-instead-of-terraform.md) |
-| Self-managed k3s rather than managed Kubernetes | The cluster bootstrap is part of what this repository demonstrates | [ADR 0002](docs/adr/0002-run-a-self-managed-k3s-cluster.md) |
-| Application credentials rather than user passwords | Scoped, revocable, never tied to a human account | [ADR 0003](docs/adr/0003-authenticate-with-an-application-credential.md) |
-| Private network behind a router rather than the shared public network | Nothing is reachable from the internet until a floating IP says so | [ADR 0004](docs/adr/0004-place-nodes-on-a-private-network.md) |
-| Outbound traffic denied by default | Every flow a node can open is declared, and reviewed as code | [ADR 0005](docs/adr/0005-deny-outbound-traffic-by-default.md) |
-| State in Swift through the S3 API, without a lock | The platform's S3 layer refuses the conditional write a lock needs; saved plans and versioning stand in | [ADR 0006](docs/adr/0006-store-the-state-in-swift-without-a-lock.md) |
-| State and plans encrypted by OpenTofu | The state holds the cluster's join token, in storage the project's credentials can read | [ADR 0007](docs/adr/0007-encrypt-the-state-and-plans.md) |
-| Node image pinned by ID | Glance republishes images under the same name; a lookup by name would replace the cluster at each rebuild | [ADR 0008](docs/adr/0008-pin-the-node-image-by-id.md) |
-| One etcd member per availability zone | A lost zone costs one member, not the quorum, for under a millisecond of latency | [ADR 0009](docs/adr/0009-place-one-etcd-member-per-availability-zone.md) |
-| etcd on the root disk, below its latency guideline | Measured: neither the root disk nor a Ceph volume meets it, and the gap has not yet been shown to matter | [ADR 0010](docs/adr/0010-keep-etcd-on-the-root-disk.md) |
-| A bastion as the only way in | No node has a public address, and the exposed machine is not a member of the cluster | [ADR 0011](docs/adr/0011-reach-the-nodes-through-a-bastion.md) |
-| Join token passed in user data | The cluster forms from one apply; each server drops its pods' traffic to the metadata service, the one path to user data that needs no root | [ADR 0012](docs/adr/0012-pass-the-join-token-in-user-data.md) |
-| k3s installed by cloud-init from the release's own script | `get.k3s.io` serves a script that follows the main branch; the tagged one runs as root only if its SHA-256 matches | [ADR 0013](docs/adr/0013-install-k3s-from-cloud-init.md) |
-| Our own Traefik and cert-manager | ingress-nginx is retired, and the copy k3s bundles would tie its settings to the servers' user data | [ADR 0014](docs/adr/0014-serve-https-with-traefik-and-cert-manager.md) |
-| An Octavia load balancer on a stable address | No node gets a public address, the client's address reaches the applications, and the DNS record survives every rebuild | [ADR 0015](docs/adr/0015-enter-through-an-octavia-load-balancer.md) |
-| Argo CD as an app of apps, installed with Helm | Git becomes the way to change what runs in the cluster; Argo CD cannot install itself, and does not manage itself | [ADR 0016](docs/adr/0016-deliver-the-cluster-services-with-argo-cd.md) |
-| OpenTofu outside the cluster, Argo CD inside | Every resource has one owner, and the four values that cross the line are listed in one place | [ADR 0017](docs/adr/0017-draw-the-line-between-opentofu-and-argo-cd.md) |
+[All the stories](docs/what-broke.md)
 
-## What broke, and how it was fixed
+## Read more
 
-This section grows as the project does, and it is deliberately placed above the feature list:
-how a platform fails and recovers says more about it than what it does on a good day.
-
-**A version constraint that OpenTofu never checked.** A typo in `required_version`, the
-operator `=>`, which does not exist, passed `tofu validate` without a word. Testing the edge
-cases showed why: OpenTofu 1.12.5, the version used here, does not enforce a `required_version`
-written in a `.tf` file. Even `">= 99.0.0"`, or plain garbage, passes `init` and `plan` there,
-while the same constraint in a `.tofu` file stops the run with `Incompatible module`. The
-[documentation](https://opentofu.org/docs/language/settings/) now describes that setting as
-kept for compatibility with Terraform, and adds a `language` block for OpenTofu's own
-constraints. The configuration in [`infra/`](infra/) uses the `.tofu` extension, so its version
-constraint is enforced.
-
-**A CLI that showed the cluster's internal ports open to the internet.** After the first
-`apply`, `openstack security group rule list`, and `rule show` as well, printed `0.0.0.0/0` as
-the remote side of the six rules scoped to the security group itself: etcd, kubelet, the
-Kubernetes API, Flannel, ICMP and node-to-node egress. Neutron refuses a rule that sets both a
-remote prefix and a remote group, so the display could not be literal. The raw API response
-(`GET /v2.0/security-group-rules`) carries `remote_ip_prefix: null` for those rules, and the
-OpenTofu state agrees: nothing was exposed. The client, python-openstackclient 10.3.0, fills
-the empty field for display. Security group rules are now verified against the API response,
-not against the client's table.
-
-**A state lock the platform cannot take.** With `use_lockfile = true`, `tofu plan` failed
-before doing anything. OpenTofu takes that lock by writing an object with `If-None-Match: *`,
-and Swift 2.30.1, which serves the S3 API here, answers every conditional write with `501
-NotImplemented`: "Conditional object PUTs are not supported." The header is checked before the
-signature, so the same answer comes back for a key that does not exist, which made it possible
-to confirm without any credential. Upstream Swift accepts the header from 2.36.0. Until the
-platform runs it, the state has no lock, and
-[ADR 0006](docs/adr/0006-store-the-state-in-swift-without-a-lock.md) says what stands in.
-
-**An S3 key the automation was not allowed to create.** `openstack ec2 credentials create`,
-run with the application credential, was refused: "Using method 'application_credential' is
-not allowed for managing additional application credentials." The message matches a check
-Keystone added to S3 key creation in April 2026 (bug 2142138), because a restricted credential
-could otherwise create a key with all of its owner's rights. The key was created once with the
-account password.
-
-**A migration that restarted the state's history.** After `tofu init -migrate-state`, the state
-in Swift was at serial 1 with a new lineage, where the local one had been at serial 10. Every
-resource was there: 21 entries, and an empty plan. On the first write to an empty backend,
-OpenTofu 1.12.5 re-reads the destination, finds nothing, and resets the lineage and serial it
-had just copied (`PersistState`, `internal/states/remote/state.go`). No harm done, but it is
-worth knowing before comparing an old copy of the state with the live one.
-
-**An argument the provider's schema advertised, and refused.** The nodes pin their image by ID,
-because Glance republishes its images under the same name: the Ubuntu 24.04 build of 14
-September was replaced on 28 September, and looking it up by name would have replaced the whole
-cluster at the next plan. Checking that ID failed first. The provider schema lists `id` as an
-optional argument of the `openstack_images_image_v2` data source, and `tofu validate` rejected
-it as an "Invalid or unknown key": that `id` is the field the plugin SDK adds to every data
-source, 53 of the 54 here. The pinned ID is now checked against the builds carrying the expected
-name, visible and hidden, which another data source can list.
-
-**A firewall rule that k3s would have outranked.** The servers had to keep their pods away from
-the metadata service, which hands out the user data, join token included. The first design was a
-rule in the node's `FORWARD` chain. Reading the code of k3s's network policy controller, an
-embedded kube-router, before writing that rule showed why it would not hold: the controller
-creates a firewall chain for every pod, even when no NetworkPolicy exists, inserts into `FORWARD`,
-after its own rules, an `ACCEPT` for the traffic that passed it, and moves its own jump back to
-the top of the chain at every sync. Whether the node's rule landed before or after that `ACCEPT`
-would have depended on which started first. The rule lives in an nftables table of its own
-instead, where a `drop` stands whatever another table accepts; see
-[ADR 0012](docs/adr/0012-pass-the-join-token-in-user-data.md).
-
-**A cloud-init template that was not YAML.** The servers' cloud-init became an OpenTofu template,
-with `%{ if }` directives to tell the first server from the others. Indented like the YAML around
-them, the directives kept their leading spaces, and the template engine added them to the next
-line: the lines inside the condition came out with twice their indentation, the block meant to
-become `config.yaml` ended after two lines, and the document no longer parsed. cloud-init cannot
-apply a document that does not parse. Rendering the template with dummy values and parsing the
-result, with `yq` and then `cloud-init schema` on a node, caught it before any server was
-replaced. The directives now start at column 0.
-
-**A load balancer that reported healthy members with nothing behind them.** Right after the
-health monitor of the 443 pool was created, before Traefik was installed, its three members
-showed `ONLINE`, while those of the 80 pool had been in `ERROR` for minutes. Nothing listened on
-that port: `ss` on a node found no socket on 30443. A minute later, they turned `ERROR` as well.
-A new monitor reports its members up for about a minute after it is created, so a green load
-balancer proves nothing until then. The members are now read minutes after Traefik starts, and
-the [cluster services runbook](docs/runbooks/cluster-services.md) says so.
-
-**An application that would never turn healthy.** Once Argo CD delivered the demo, the site
-answered and its certificate was issued, yet Argo CD kept reporting the demo as progressing, and
-the root application with it. The `Ingress` was the holdout: Argo CD calls an `Ingress` healthy only
-once its status carries an address, and this one carried none. Traefik fills that status by
-copying its own Service's, and its Service is a `NodePort`, with no address to copy: the address
-lives on the Octavia load balancer, outside the cluster. Traefik now publishes the stable public
-address itself (`ingressEndpoint.ip`), with the copy disabled; left on, both settings reached
-Traefik. The demo turned healthy, and the address joined the values written on both sides of the
-line between OpenTofu and Argo CD; see [ADR 0017](docs/adr/0017-draw-the-line-between-opentofu-and-argo-cd.md).
-
-**A self-healing cluster that left a manual change in place.** Scaled by hand to three replicas,
-the demo stayed at three for minutes, with self-healing on. Its Deployment did not declare a
-replica count: Kubernetes had filled one in, and Argo CD enforces only what the manifest declares.
-Its own best practices leave `replicas` out of Git on purpose, when an autoscaler owns it. Nothing
-in Git contradicted three replicas, so there was nothing to heal. The manifest now declares one,
-and the same command is undone.
-
-**A cloud-init error on a healthy cluster.** After the rebuild of 2026-10-11, `cloud-init status`
-read `error` on two of the three servers, while all three nodes were `Ready`. Both had started k3s
-a few seconds before the first server listened, and k3s exited at once: "failed to get CA certs
-… connection refused". The installation script, which starts the service, failed with it, and so
-did cloud-init's `runcmd`. systemd restarted k3s, and the two servers joined 17 and 31 s after the
-first one was ready. On the build measured on 2026-10-02, the joining server had started two
-seconds after the first, and nothing restarted. A node's state is now read from the cluster, not
-from cloud-init; see the amendment to [ADR 0013](docs/adr/0013-install-k3s-from-cloud-init.md).
-
-## Known limitations
-
-- **Energy figures are estimates.** RAPL counters are not exposed inside a virtual machine, so
-  per-pod power is derived from a model rather than read from hardware. The margin of error is
-  documented alongside the dashboard rather than hidden behind it.
-- **The DNS record is set by hand.** It points at the ingress's stable address, which survives
-  every rebuild, so it was set once. Folding it into the same `apply` through Designate, the
-  OpenStack DNS API, depends on delegating the subdomain to Designate's nameservers; that is left
-  to the one-command step.
-- **A new load balancer takes two applies.** On a fresh build, the first `apply` fails on the
-  health monitor of the 443 pool, with a message that blames its type; a second plan and apply
-  creates it. See [ADR 0015](docs/adr/0015-enter-through-an-octavia-load-balancer.md).
-- **The entry point is not spread across zones.** On 2026-10-09, both of the load balancer's
-  amphorae ran in the same zone, one of the cluster's three. Losing it would cost the entry point
-  as well as one etcd member.
-- **Administration has a single door.** The bastion is the only way to the nodes. If it fails, the
-  cluster keeps running but cannot be administered until an apply recreates it.
-- **etcd's disk is slower than etcd asks for.** Measured `fdatasync` latency at the 99th
-  percentile is 10 to 24 ms on the nodes' root disks, against a guideline of 10 ms; see
-  [ADR 0010](docs/adr/0010-keep-etcd-on-the-root-disk.md).
-- **User data is readable from inside every instance**, from a config drive the platform always
-  attaches and from the metadata service, and the servers' user data carries the cluster's join
-  token. Root on a server can read the token anyway; each server drops its pods' traffic to the
-  metadata service. See [ADR 0012](docs/adr/0012-pass-the-join-token-in-user-data.md).
-- **Every k3s setting is fixed when a server is created.** It lives in the user data, so changing
-  the version or any option replaces the three servers, and the cluster with them. That holds
-  while nothing lives only in the cluster; see
-  [ADR 0013](docs/adr/0013-install-k3s-from-cloud-init.md).
-- **The metered cost is incomplete.** For nine hours, CloudKitty rated only the reserved part of
-  one running node, never its running part. Cost figures taken from it are a lower bound, and
-  say so; see the [inventory](docs/platform-inventory.md#cost).
-- **Argo CD sits outside its own reconciliation.** Helm installs it, and its values in Git are
-  applied when Helm runs again, not when they are pushed; the two can disagree without notice. See
-  [ADR 0016](docs/adr/0016-deliver-the-cluster-services-with-argo-cd.md).
-- **Changes arrive by polling.** Argo CD is not exposed, so GitHub cannot notify it: a pushed
-  change takes up to three minutes to land.
-- **A rebuild needs five services on the Internet.** GitHub, `ghcr.io`, `quay.io`, `docker.io` and
-  `ecr-public.aws.com` serve the manifests, charts, images and k3s's installation script. A
-  running cluster does not need them to keep serving; see
-  [ADR 0017](docs/adr/0017-draw-the-line-between-opentofu-and-argo-cd.md).
-- **The state has no lock.** One operator, saved plans and a versioned container stand in for
-  it. That holds for a lab run by one person, and not beyond; see
-  [ADR 0006](docs/adr/0006-store-the-state-in-swift-without-a-lock.md) and the
-  [remote state runbook](docs/runbooks/remote-state.md).
+- [Decisions](docs/adr/): 17 ADRs, each with the options it rejected
+- [What broke, and how it was fixed](docs/what-broke.md)
+- [Known limitations](docs/limitations.md)
+- Runbooks: [nodes](docs/runbooks/node-access.md), [cluster](docs/runbooks/cluster-access.md),
+  [services](docs/runbooks/cluster-services.md), [remote state](docs/runbooks/remote-state.md)
+- [Platform inventory](docs/platform-inventory.md): what the cloud offers, and what it costs
 
 ## License
 
