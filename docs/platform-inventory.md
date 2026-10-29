@@ -161,7 +161,7 @@ Why the cluster uses neither shared network is recorded in
   port quota.
 - **Security group rules scoped to a group are misreported by the CLI**, which prints
   `0.0.0.0/0` as their source. The API returns no prefix for them. See
-  [what broke](../README.md#what-broke-and-how-it-was-fixed).
+  [what broke](what-broke.md).
 
 ### Measured on the load balancer
 

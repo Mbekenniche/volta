@@ -1,9 +1,10 @@
 # Cluster services
 
 How the services inside the cluster come to run: Argo CD, installed with Helm, then an app of
-apps that brings Traefik, cert-manager with its two issuers, and the demo application from this
-repository. On a fresh cluster, after a destroy and apply, this runbook is played from the top;
-after that, every change goes through Git. Why it works this way is recorded in
+apps that brings Traefik, cert-manager with its two issuers, the Cinder CSI driver, the
+monitoring stack, Velero and the demo application from this repository. On a fresh cluster,
+`make up` plays sections 1 and 2 and waits for their result
+([lifecycle runbook](lifecycle.md)); after that, every change goes through Git. Why it works this way is recorded in
 [ADR 0016](../adr/0016-deliver-the-cluster-services-with-argo-cd.md) and
 [ADR 0017](../adr/0017-draw-the-line-between-opentofu-and-argo-cd.md).
 
@@ -43,18 +44,18 @@ kubectl apply -f cluster/argocd/root.yaml
 
 - **It is the only `Application` applied by hand.** It reads [`cluster/apps/`](../../cluster/apps/)
   on `main`, where each file is an `Application`, and creates them.
-- **The root does not sync by itself.** Sync it from Argo CD's interface (section 3): open
-  `app-of-apps` and press Sync. Its children then sync on their own. A file added to or removed
-  from `cluster/apps/` also waits for a sync of the root.
-- **The children come in sync waves**: Traefik and cert-manager first, then the issuers, once
-  cert-manager's webhook answers, then the demo, whose `Ingress` needs Traefik's `Middleware`
-  type and an issuer.
+- **The root syncs by itself**, with the same policy as its children. A file added to or
+  removed from `cluster/apps/` lands at the next poll of the repository.
+- **The children come in sync waves**: Traefik, cert-manager, the Cinder CSI driver and Velero
+  first; then the issuers, once cert-manager's webhook answers; then the demo, whose `Ingress`
+  needs Traefik's `Middleware` type and an issuer, and the monitoring stack, whose volume needs
+  the driver.
 
 ```sh
 kubectl -n argocd get applications
 ```
 
-The five `Application` resources are expected `Synced` and `Healthy`. On 2026-10-11, the demo's
+The eight `Application` resources, the root among them, are expected `Synced` and `Healthy`. On 2026-10-11, the demo's
 production certificate was `Ready` two minutes after the root's sync started.
 
 ## 3. Argo CD's interface
