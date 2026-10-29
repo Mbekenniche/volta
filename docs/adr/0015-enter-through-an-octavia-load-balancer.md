@@ -106,3 +106,19 @@ at every renewal.
 
 **HTTP listeners** rather than TCP. Rejected: the load balancer would parse every request, for no
 use, since Traefik routes them.
+
+## Amendment — 2026-10-29
+
+**The health monitor's message blamed the wrong thing.** In Octavia's API, any database error
+raised while a health monitor is created is reported as `<type> is not a valid option for type`:
+the `except DBError` of `post()` in `health_monitor.py`, in every release since at least Victoria.
+Infomaniak's API reports version 2.26. On the same load balancer, the pools' members were being
+added at the same time as the monitors, the most likely source of that error; Octavia's logs were
+not available to confirm it. Making the 443 pool's monitor wait for the other one moved the
+failure to the first: on the fresh build of 2026-10-29, the second apply created both monitors,
+five seconds apart. Both monitors now wait for both pools' members, one after the other, and the
+next fresh build took one apply: one sample, after three failures in three builds.
+
+**Designate is not used.** The record points at the stable address, which no rebuild changes, so
+the one-command step has nothing to update there; see
+[ADR 0020](0020-build-from-the-workstation-and-check-in-ci.md).

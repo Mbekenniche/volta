@@ -96,3 +96,9 @@ raw API calls, and nothing would record what was done.
 
 **Keep the state local.** Rejected: one laptop would stay the only record able to destroy the
 platform.
+
+## Amendment — 2026-10-29
+
+The CI added at the one-command step never plans or applies, and holds no S3 key
+([ADR 0020](0020-build-from-the-workstation-and-check-in-ci.md)). The workstation remains the
+only place that writes the state, and this decision holds as written.

@@ -98,3 +98,21 @@ every server, with or without k3s's `etcd-expose-metrics`, which only adds the n
 (k3s `pkg/etcd/etcd.go`). Among them are the duration of its write-ahead log's `fdatasync` and
 the count of leader changes. The decision is
 checked at the observability step, where Prometheus collects those metrics over time.
+
+## Amendment — 2026-10-29
+
+Prometheus read etcd's metrics from 2026-10-25 01:34 to 2026-10-29 19:56 UTC, until the cluster
+was destroyed: about four days and eighteen hours, and 2.3 million write-ahead log syncs per
+member.
+
+| Member | WAL `fdatasync`, p99 | Backend commit, p99 | Leader changes seen |
+|---|---|---|---|
+| Server 1 | 27 ms | 29 ms | 14 |
+| Server 2 | 26 ms | 28 ms | 16 |
+| Server 3 | 42 ms | 119 ms | 22 |
+
+Over days, the disks stay above the 10 ms guideline, as in the test this ADR rests on, and
+server 3 is the slowest. Each member's counters restarted two to seven times in the window, and a
+restarted member counts the leader it finds as a change. How many of these changes came from a
+slow write, the trigger set above, has not been read from etcd's logs; the decision is unchanged
+until it is.

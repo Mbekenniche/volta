@@ -76,3 +76,19 @@ servers ([ADR 0013](0013-install-k3s-from-cloud-init.md)). The one-command step 
 **A cloud controller in the cluster**, creating an OpenStack load balancer for each `LoadBalancer`
 Service. Rejected in [ADR 0015](0015-enter-through-an-octavia-load-balancer.md): it would put an
 OpenStack credential in the cluster, and OpenStack resources outside the state.
+
+## Amendment — 2026-10-29
+
+Two exceptions to the table above:
+
+- **Cinder volumes**, created by the CSI driver for Prometheus
+  ([ADR 0018](0018-observe-the-cluster-with-prometheus-on-a-cinder-volume.md)), live in OpenStack
+  outside the state. A destroy leaves them behind; `make down` deletes them afterwards, found by
+  the mark the driver sets on each.
+- **Four Secrets are not Argo CD's**: the driver's credential, Grafana's admin password, Velero's
+  S3 key and its repository password. Their source is a set of files on the workstation, and
+  `make up` creates them before Argo CD starts
+  ([ADR 0020](0020-build-from-the-workstation-and-check-in-ci.md)).
+
+Velero's container, like the stable address, belongs to the bootstrap stack
+([ADR 0019](0019-back-up-to-swift-with-velero.md)).
