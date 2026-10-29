@@ -120,3 +120,12 @@ can create anything in the cluster, and its interface would put that power behin
 a second door next to the bastion. It would have allowed a webhook from GitHub.
 
 **OpenTofu installing Argo CD.** Rejected; see [ADR 0017](0017-draw-the-line-between-opentofu-and-argo-cd.md).
+
+## Amendment — 2026-10-29
+
+The root `Application` now syncs on its own, with the same policy as its children: automated,
+with pruning, self-healing and retries. On the two fresh clusters built on 2026-10-29, every
+`Application` turned `Synced` and `Healthy` without a click. `make up` installs Argo CD with
+Helm's `--wait`, applies the root and waits for it to be healthy
+([ADR 0020](0020-build-from-the-workstation-and-check-in-ci.md)): the bootstrap no longer goes
+through the interface.
