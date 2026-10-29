@@ -44,6 +44,7 @@ id_ed25519*
 # ── Kubernetes ─────────────────────────────────────────────────────────
 kubeconfig
 kubeconfig*
+!kubeconfig.sh
 *.kubeconfig
 .kube/
 # Plaintext secrets. Encrypted ones (SOPS, Sealed Secrets) are allowed and must
