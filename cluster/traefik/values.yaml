@@ -22,4 +22,3 @@ providers:
       ip: 179.237.92.39
     publishedService:
       enabled: false
-deployment: {}
