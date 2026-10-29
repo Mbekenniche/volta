@@ -1,20 +1,15 @@
 # Lifecycle
 
-How to build the platform with one command and destroy it with another. Why it works this way is
-recorded in [ADR 0020](../adr/0020-build-from-the-workstation-and-check-in-ci.md).
+Build, destroy, and repair the state. Why: [ADR 5](../adr/0005-build-from-the-workstation-and-check-in-ci.md).
 
 ## What it takes
 
-- `tofu`, `openstack`, `kubectl`, `helm`, `jq` and `dig` on the workstation.
-- The environment of the [remote state runbook](remote-state.md): `OS_CLOUD`, `AWS_PROFILE` and
-  `TF_VAR_encryption_passphrase`.
-- The workstation's public address in `admin_cidr`, in `infra/terraform.tfvars`, applied.
-- The SSH key named in `infra/terraform.tfvars`, `~/.ssh/volta_lab`.
-- Four files in `~/.config/volta/`, never in the repository: `cloud.conf`,
-  `grafana-admin-password`, `velero-credentials` and `velero-repo-password`. The two passwords
-  have no final newline: `--from-file` would keep it.
-
-`make preflight` checks all of it but the key, and stops on the first thing missing.
+- `tofu`, `openstack`, `kubectl`, `helm`, `jq`, `dig`.
+- `OS_CLOUD` (the `clouds.yaml` entry), `AWS_PROFILE` (the S3 key), `TF_VAR_encryption_passphrase`.
+  [`.envrc.example`](../../.envrc.example) shows one way to set them.
+- The workstation's public address in `admin_cidr`, in `infra/terraform.tfvars`.
+- `~/.ssh/volta_lab`, and in `~/.config/volta/`: `cloud.conf`, `grafana-admin-password`,
+  `velero-credentials`, `velero-repo-password` (the passwords without a final newline).
 
 ## Build
 
@@ -22,36 +17,10 @@ recorded in [ADR 0020](../adr/0020-build-from-the-workstation-and-check-in-ci.md
 make up
 ```
 
-- **The plan comes first.** If it changes anything, `make up` waits for `yes`, typed, then applies
-  that exact plan. A plan with no changes asks nothing.
-- **It ends when the demo answers over HTTPS** with a valid certificate, after three nodes `Ready`
-  and the root `Application` `Synced` and `Healthy`.
-- **Every line it prints starts with a UTC time**, which gives the duration of each phase.
-- **Each phase runs alone**: `make preflight`, `make infra`, `make ssh-config`,
-  `make kubeconfig`, `make secrets`, `make services`. `make -n up` shows the order.
-- **An interrupted or failed run is resumed by running `make up` again.** Each phase does nothing
-  when its work is already done.
-
-Then, in any terminal used on the platform:
-
-```sh
-export KUBECONFIG=~/.kube/volta-lab.yaml OS_CLOUD=volta-tofu
-kubectl -n argocd get applications
-```
-
-The eight `Application` resources are expected `Synced` and `Healthy`. The scripts set
-`KUBECONFIG` themselves; the operator's shell does not, and its default context may be another
-cluster.
-
-## The files of a build
-
-`.project/ssh/`, which Git ignores, holds the outputs of the main stack (`outputs.json`), the
-known hosts, the SSH configuration and, in `keys/`, one host key per instance, named by the
-instance's ID. The kubeconfig is `~/.kube/volta-lab.yaml`, mode 0600.
-
-`keys/` matters most: a host key can be read from the console log only while its instance is new
-([node access runbook](node-access.md)). From another workstation, the keys of a running build
-are no longer in the console: copy `keys/` over, or rebuild.
+- Type `yes` after reading the plan. No changes, no question.
+- Done when the demo answers over HTTPS.
+- Stopped or failed: run it again. One phase alone: `make preflight`, `infra`, `ssh-config`,
+  `kubeconfig`, `secrets`, `services`.
 
 ## Destroy
 
@@ -59,14 +28,7 @@ are no longer in the console: copy `keys/` over, or rebuild.
 make down
 ```
 
-- **The destroy plan comes first**, then the name of the environment, `volta-lab`, typed.
-- **Only the main stack goes.** The bootstrap stack keeps the state, the stable address and the
-  backups.
-- **The volumes of the Cinder CSI driver go after it**, each once it is detached. Prometheus's
-  history goes with them, and stays in the backups.
-- **The kubeconfig, the outputs and the host keys of the destroyed build are deleted.**
-
-Then:
+Type `volta-lab` after reading the plan. Then check what is left:
 
 ```sh
 openstack server list
@@ -75,20 +37,29 @@ openstack volume list
 openstack floating ip list
 ```
 
-Nothing is expected but the stable address, `179.237.92.39`, with no fixed address. What stays
-billed is the stable address and the bootstrap stack's containers.
+Expected: only `179.237.92.39`, with no fixed address.
 
-## When it does not go through
+## When it fails
 
-- **"this workstation is …, admin_cidr … is …".** The address has changed. Update `admin_cidr`,
-  then `make infra`: Neutron cannot edit a rule, so the plan replaces the two that name it.
-- **"… is new, waiting for its host keys on the console", for an instance that is not new.** Its
-  key is not in `keys/`, and its console no longer holds it. Copy `keys/` from the workstation that
-  built it, or rebuild the instance.
-- **A destroy that times out on the router interface.** Something the state no longer knows still
-  uses the router, such as the stable address associated with a load balancer. List what is left as
-  above, delete it (`openstack loadbalancer delete --cascade`, `openstack server delete`), then run
-  `make down` again; see [what broke](../what-broke.md#a-destroy-that-forgot-half-the-platform).
-- **The first apply fails on a health monitor**, "TCP is not a valid option for type". Run
-  `make up` again: the plan shows only what is missing. See the amendment to
-  [ADR 0015](../adr/0015-enter-through-an-octavia-load-balancer.md).
+| Symptom | Fix |
+|---|---|
+| `admin_cidr … is …` | Put the new address in `admin_cidr`, then `make infra` |
+| `… is new, waiting for its host keys`, on an old instance | Its key is not in `.project/ssh/keys/`, and its console no longer holds it: copy `keys/` from the workstation that built it, or rebuild |
+| A health monitor, `TCP is not a valid option for type` | `make up` again |
+| Destroy times out on the router interface | Something the state forgot still uses the router. Delete it (`openstack loadbalancer delete --cascade`, `openstack server delete`), then `make down` again |
+| `Saved plan is stale` | The state changed since the plan: plan again |
+
+## Restore a version of the state
+
+The container keeps every version. List them, then copy one over the current object:
+
+```sh
+TOKEN=$(openstack token issue -f value -c id)
+BASE=https://s3.pub1.infomaniak.cloud/object/v1/AUTH_<project_id>/volta-lab-tfstate
+curl -s -H "X-Auth-Token: $TOKEN" "$BASE?format=json&versions" \
+  | jq -r '.[] | "\(.version_id)  \(.last_modified)  \(.bytes)"'
+curl -s -o /dev/null -w '%{http_code}\n' -X COPY -H "X-Auth-Token: $TOKEN" \
+  -H "Destination: volta-lab-tfstate/infra.tfstate" "$BASE/infra.tfstate?version-id=<version_id>"
+```
+
+Expect `201`, then an empty `tofu -chdir=infra plan`.

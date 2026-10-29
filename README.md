@@ -99,35 +99,23 @@ make up     # a plan, a typed yes, the apply, then everything up to the demo ove
 make down   # the main stack and its volumes; the state, the stable address and the backups stay
 ```
 
-Each phase of `make up` does nothing when its work is already done, so a run that stops is resumed
-by running it again. The CI checks every pull request without holding a secret; only the
-workstation applies. Why: [ADR 0020](docs/adr/0020-build-from-the-workstation-and-check-in-ci.md).
+A stopped `make up` resumes when run again. The CI checks every pull request and holds no secret.
 
 ## A few things that broke
 
-- The OpenStack CLI showed etcd and the Kubernetes API open to the internet; the raw API said
-  otherwise. [Read](docs/what-broke.md#a-cli-that-showed-the-clusters-internal-ports-open-to-the-internet)
-- Swift refuses the conditional write a state lock needs, so the state has no lock, and the
-  repository says what stands in for it. [Read](docs/what-broke.md#a-state-lock-the-platform-cannot-take)
-- A firewall rule on the nodes would have lost to k3s's own, depending on which started first.
-  [Read](docs/what-broke.md#a-firewall-rule-that-k3s-would-have-outranked)
-- Argo CD's self-healing left a manual `scale` in place: the manifest never declared a replica
-  count. [Read](docs/what-broke.md#a-self-healing-cluster-that-left-a-manual-change-in-place)
-- A rule on `main` saved without its required checks let a red pull request through, and Argo CD
-  deployed it. [Read](docs/what-broke.md#a-rule-on-main-that-let-a-red-pull-request-through)
-- Octavia refused a health monitor for its type; the type was fine, and the error came from its
-  database. [Read](docs/what-broke.md#a-health-monitor-refused-for-a-type-that-was-fine)
-
-[All the stories](docs/what-broke.md)
+- Swift refuses the conditional write a state lock needs.
+  [Read](docs/what-broke.md#a-state-lock-the-platform-cannot-take)
+- Octavia refused a health monitor for its type; the error came from its database.
+  [Read](docs/what-broke.md#a-health-monitor-refused-for-a-type-that-was-fine)
+- A rule on `main` without its required checks let a red pull request through.
+  [Read](docs/what-broke.md#a-rule-on-main-that-let-a-red-pull-request-through)
 
 ## Read more
 
-- [Decisions](docs/adr/): 20 ADRs, each with the options it rejected
-- [What broke, and how it was fixed](docs/what-broke.md)
-- [Known limitations](docs/limitations.md)
-- Runbooks: [lifecycle](docs/runbooks/lifecycle.md), [nodes](docs/runbooks/node-access.md),
-  [cluster](docs/runbooks/cluster-access.md), [services](docs/runbooks/cluster-services.md),
-  [restore](docs/runbooks/restore.md), [remote state](docs/runbooks/remote-state.md)
+- [Decisions](docs/adr/): the five that shape the platform
+- [What broke](docs/what-broke.md) and [known limitations](docs/limitations.md)
+- Runbooks: [lifecycle](docs/runbooks/lifecycle.md), [access](docs/runbooks/access.md),
+  [restore](docs/runbooks/restore.md)
 - [Platform inventory](docs/platform-inventory.md): what the cloud offers, and what it costs
 
 ## License
