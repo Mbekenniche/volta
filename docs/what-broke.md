@@ -131,3 +131,55 @@ did cloud-init's `runcmd`. systemd restarted k3s, and the two servers joined 17 
 first one was ready. On the build measured on 2026-10-02, the joining server had started two
 seconds after the first, and nothing restarted. A node's state is now read from the cluster, not
 from cloud-init; see the amendment to [ADR 0013](adr/0013-install-k3s-from-cloud-init.md).
+
+## An upload that the object storage refused for its encoding
+
+Velero's first backup never reached Swift: every `PutObject` came back `501`, "aws-chunked is
+not supported". The plugin for S3 storage, v1.14.4, sends a CRC32 checksum with each upload by
+default, read in its source, and the AWS SDK then switches the upload to the `aws-chunked`
+encoding, which Swift 2.30.1 does not implement. The plugin's `checksumAlgorithm: ""` turns the
+checksum off, and the uploads went through; see
+[ADR 0019](adr/0019-back-up-to-swift-with-velero.md).
+
+## A restore that blocked cert-manager
+
+The first restore of the `monitoring` namespace brought back cert-manager's certificate requests.
+Each pointed at a temporary private key held in a Secret, and Secrets are excluded from the
+backups: the requests stayed pending for good, and cert-manager could not create its own. The
+Prometheus operator, whose webhook certificates come from cert-manager, waited with them. The
+second restore excluded the requests; cert-manager issued new ones, and Prometheus came back with
+its history in about three minutes. The [restore runbook](runbooks/restore.md) excludes them.
+
+## A rule on `main` that let a red pull request through
+
+The rule protecting `main` was first saved without its required checks. A test pull request,
+whose Traefik values declared the `deployment` key twice, failed its checks and merged anyway:
+the rule asked for a pull request, not for green checks. Helm keeps the last of two duplicate
+keys, so Argo CD applied a Traefik values file that turned the DaemonSet into a one-replica
+Deployment, four minutes after the merge. A revert, through another pull request, brought the
+DaemonSet back six minutes later. The three checks are now required, on a branch up to date with
+`main`; see [ADR 0020](adr/0020-build-from-the-workstation-and-check-in-ci.md).
+
+## A health monitor refused for a type that was fine
+
+On every fresh build, the first apply failed on a health monitor of the load balancer, "TCP is
+not a valid option for type", while the other, identical, went through, and a second apply
+created it. The type was never the problem. In Octavia's API, any database error raised while a
+monitor is created is reported that way, whatever the type. Making one monitor wait for the
+other only moved the failure. Both now wait for the pools' members, added to the same load
+balancer at the same time, and the next fresh build took one apply; see the amendment to
+[ADR 0015](adr/0015-enter-through-an-octavia-load-balancer.md).
+
+## A destroy that forgot half the platform
+
+On 2026-10-29, `make down` timed out on the router's interface to the subnet. OpenStack still held
+servers 1 and 3 and the bastion, without any network port, and the load balancer, with the stable
+address associated with it: Neutron cannot remove a router interface while a floating IP goes
+through it. None of them showed a delete request, their last update dating from their creation;
+they had left OpenTofu's state without one. The state's versions in Swift show it: 91 KB after the
+last apply, 43 KB at the destroy's first write. OpenTofu destroyed server 2, then what the
+others had rested on, the ports, the security groups and the key pair, which nothing held back
+any more. The leftovers were deleted by hand, and
+`make down` went through. One `make down` ran, alone; the cause is not found. After each
+`make down`, the project's servers and load balancers are now listed
+([lifecycle runbook](runbooks/lifecycle.md)).

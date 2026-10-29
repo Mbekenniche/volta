@@ -14,7 +14,9 @@ reached through an SSH tunnel to the bastion. Why is recorded in the amendments 
 
 ## Fetch the kubeconfig
 
-Commands run from the root of the repository, like those of the node access runbook. k3s writes
+`make kubeconfig` runs this section and the next, then waits for three nodes `Ready`; see the
+[lifecycle runbook](lifecycle.md). Commands run from the root of the repository, like those of
+the node access runbook. k3s writes
 an admin kubeconfig on every server, readable by root only. Copy it from one of them:
 
 ```sh
@@ -62,6 +64,6 @@ pkill -f 'L 127.0.0.1:6443'
 
 ## After a destroy and apply
 
-Every address, host key and certificate is new. Rebuild the node access first, as in the
-[node access runbook](node-access.md), then fetch the kubeconfig again and open the tunnel to the
-server's new address. The old kubeconfig names a certificate authority that no longer exists.
+Every address, host key and certificate is new, and the old kubeconfig names a certificate
+authority that no longer exists. `make up` rebuilds the node access, fetches the kubeconfig again
+and opens the tunnel to the server's new address.

@@ -23,6 +23,13 @@ At first boot, cloud-init prints each instance's SSH host keys, and their finger
 instance's console. The console log is read through the OpenStack API, authenticated, so the keys
 can be trusted before the first connection, rather than accepted on it.
 
+**Nova keeps only the end of a console log**, about 1,200 lines here, and that block was gone from
+every instance within days. A key can only be read while its instance is new. `make ssh-config`
+reads it then, checks its fingerprint, and keeps it under the instance's ID in
+`.project/ssh/keys/`; it then writes the known hosts and the configuration below from those keys
+and the outputs ([lifecycle runbook](lifecycle.md)). The commands that follow show the reading
+itself.
+
 ```sh
 mkdir -p .project/ssh
 tofu -chdir=infra output -json > .project/ssh/outputs.json
@@ -107,8 +114,9 @@ ssh -F .project/ssh/config -o ProxyJump=none -o ConnectTimeout=10 volta-lab-serv
 ## After a destroy and apply
 
 The floating IP is released on destroy, so the bastion gets a new public address, the nodes get
-new private ones, and every instance has new host keys. Rebuild the known hosts and the
-configuration, in that order. Nothing from the previous run is worth keeping.
+new private ones, and every instance has new host keys. `make up` rebuilds the known hosts and
+the configuration; `make down` deletes the keys of the destroyed instances. Nothing from the
+previous run is worth keeping.
 
 ## When it does not connect
 
