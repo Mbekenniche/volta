@@ -26,7 +26,7 @@ They are not secrets, but they identify a tenancy and tell a reader nothing.
 | Barbican | `key-manager` | Not used: TLS ends at Traefik, inside the cluster |
 | Designate | `dns` | Candidate for managing records in the same `apply` |
 | Ceilometer, Gnocchi, CloudKitty, Aodh | `metering`, `metric`, `rating`, `alarming` | Billed cost, to compare against the energy model |
-| Heat, Heat-CFN | `orchestration`, `cloudformation` | Not used — see [ADR 0001](adr/0001-use-opentofu-instead-of-terraform.md) |
+| Heat, Heat-CFN | `orchestration`, `cloudformation` | Not used: OpenTofu creates everything |
 | Placement, Panko | `placement`, `event` | Internal to the platform |
 
 Magnum (`container-infra`) is absent, so there is no OpenStack-native managed Kubernetes API
@@ -104,8 +104,8 @@ RancherOS and CirrOS.
   (`/dev/sda` in the guest, not `/dev/vda`), the QEMU guest agent enabled, and `ubuntu` as its
   default user.
 
-Why the nodes pin an ID rather than a name is recorded in
-[ADR 0008](adr/0008-pin-the-node-image-by-id.md).
+The nodes pin an ID rather than a name: a lookup by name would replace the cluster whenever an
+image is republished.
 
 ## Networking
 
@@ -140,8 +140,7 @@ deleted on 2026-09-24
   IPv6-only network".
 - **The subnets of `ext-floating1` are not visible to the project.**
 
-Why the cluster uses neither shared network is recorded in
-[ADR 0004](adr/0004-place-nodes-on-a-private-network.md).
+The cluster uses neither shared network: its nodes sit on a private network behind a router.
 
 ### Measured on the network layer
 
@@ -182,8 +181,8 @@ Why the cluster uses neither shared network is recorded in
   listens or not.
 - **The first apply of a new load balancer fails on one of its two health monitors**, the one of
   the 443 pool on both builds, with `TCP is not a valid option for type`. The other, identical,
-  goes through, and a second apply creates the first. See
-  [ADR 0015](adr/0015-enter-through-an-octavia-load-balancer.md).
+  goes through, and a second apply creates the first. The cause, and the fix, are in
+  [what broke](what-broke.md#a-health-monitor-refused-for-a-type-that-was-fine).
 
 ## Block storage
 
@@ -201,7 +200,7 @@ Measured with a 20 GiB test volume on 2026-10-01, created and deleted the same m
   id>`.
 - **Synchronous writes take about 4.5 ms at the median**, as on the instances' root disks. The
   measurement, and why etcd stays on the root disk, are in
-  [ADR 0010](adr/0010-keep-etcd-on-the-root-disk.md).
+  [ADR 1](adr/0001-run-a-self-managed-k3s-cluster.md).
 
 ## Object storage
 
@@ -219,7 +218,7 @@ signed with a key that does not exist, so that nothing can be written. Measured 
   NotImplemented`, "Conditional object PUTs are not supported.", before the signature is even
   checked. The same request without that header fails on its signature (403). Upstream Swift
   accepts `If-None-Match: *` from 2.36.0. This is why the state cannot be locked, see
-  [ADR 0006](adr/0006-store-the-state-in-swift-without-a-lock.md).
+  [ADR 2](adr/0002-store-the-state-in-swift-without-a-lock.md).
 - **Versioning works through both APIs.** A container with versioning enabled reports
   `X-Versions-Enabled: True` on Swift and `Enabled` on S3. Its versions are listed with
   `?versions`, and a `COPY` of an old version onto the current name restores it as a new
@@ -283,7 +282,7 @@ the bastion's and the ingress's, and no volume. Octavia sets no limit on load ba
 - **cloud-init finished 41 to 48 s after the instance was created** on a 2 vCPU node, and 82 to
   84 s on a 1 vCPU instance, in two rounds.
 - **The console log carries the SSH host keys**, which is how the known hosts are built without
-  trusting a first connection. See the [node access runbook](runbooks/node-access.md).
+  trusting a first connection. `make ssh-config` reads them there.
 - **Ubuntu's packages come over plain HTTP**, from a mirror named after the zone
   (`http://dc3-a-04.clouds.archive.ubuntu.com/ubuntu/`) and from `security.ubuntu.com`. Only
   `snapd` asked for HTTPS.
@@ -350,5 +349,5 @@ platform. Security groups here are stateful (`stateful: true`): the reply to an 
 connection needs no rule of its own.
 
 The group this repository creates deletes Neutron's default rules and declares every flow
-itself (`delete_default_rules = true`). Why is recorded in
-[ADR 0005](adr/0005-deny-outbound-traffic-by-default.md).
+itself (`delete_default_rules = true`): every flow a node can open is declared, and reviewed as
+code.
