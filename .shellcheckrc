@@ -1,0 +1,2 @@
+# Follow the lib.sh each script sources, so that its functions are checked with the script.
+source-path=SCRIPTDIR
