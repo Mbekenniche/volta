@@ -63,6 +63,7 @@ resource "openstack_lb_monitor_v2" "ingress_http" {
   delay       = 20
   timeout     = 10
   max_retries = 5
+  depends_on  = [openstack_lb_members_v2.ingress_http, openstack_lb_members_v2.ingress_https]
 }
 
 resource "openstack_lb_monitor_v2" "ingress_https" {
@@ -71,7 +72,7 @@ resource "openstack_lb_monitor_v2" "ingress_https" {
   delay       = 20
   timeout     = 10
   max_retries = 5
-  depends_on  = [openstack_lb_monitor_v2.ingress_http, openstack_lb_pool_v2.ingress_http, openstack_lb_pool_v2.ingress_https]
+  depends_on  = [openstack_lb_monitor_v2.ingress_http]
 }
 
 resource "openstack_networking_floatingip_associate_v2" "ingress" {
