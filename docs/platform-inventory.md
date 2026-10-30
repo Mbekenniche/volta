@@ -1,353 +1,92 @@
 # Platform inventory
 
-What the Infomaniak Public Cloud exposes to this project, read from the API in region `dc3-a`
-with the `volta-opentofu` application credential: first on 2026-09-19, then on 2026-09-24 once
-the network layer had been built on top of it, and on 2026-10-01 from inside the first
-instances. Each section names the command that produced it.
-Nothing here was taken from the provider's documentation without being confirmed against the
-API first.
-
-Account identifiers — project ID, credential ID, network UUIDs — are deliberately left out.
-They are not secrets, but they identify a tenancy and tell a reader nothing.
+What the Infomaniak Public Cloud offers this project, read from its API in region `dc3-a`
+between 2026-09-19 and 2026-10-29. Nothing here comes from the documentation alone.
 
 ## Services
 
-`openstack catalog list`
+| Service | Used for |
+|---|---|
+| Nova, Neutron, Glance | Instances, private network, router, security groups, images |
+| Octavia | The entry point: one load balancer, TCP 80 and 443 |
+| Cinder | Prometheus's volume |
+| Swift, through S3 | The state and Velero's backups |
+| CloudKitty | The billed cost, to compare with the energy model |
+| Designate, Barbican, Heat | Not used |
 
-| Service | Type | What this project uses it for |
-|---|---|---|
-| Keystone | `identity` | Application credential authentication |
-| Nova | `compute` | Cluster instances |
-| Neutron | `network` | Private network, router, security groups, floating IPs |
-| Glance | `image` | Base images |
-| Cinder | `volumev2`, `volumev3` | Persistent volumes |
-| Swift | `object-store` | Remote state, and Velero backups later |
-| Octavia | `load-balancer` | Ingress entry point: one load balancer, TCP 80 and 443 |
-| Barbican | `key-manager` | Not used: TLS ends at Traefik, inside the cluster |
-| Designate | `dns` | Candidate for managing records in the same `apply` |
-| Ceilometer, Gnocchi, CloudKitty, Aodh | `metering`, `metric`, `rating`, `alarming` | Billed cost, to compare against the energy model |
-| Heat, Heat-CFN | `orchestration`, `cloudformation` | Not used: OpenTofu creates everything |
-| Placement, Panko | `placement`, `event` | Internal to the platform |
+No Magnum: Infomaniak's managed Kubernetes sits outside the OpenStack API.
 
-Magnum (`container-infra`) is absent, so there is no OpenStack-native managed Kubernetes API
-here. A managed offering exists outside the standard API nonetheless: Glance publishes eight
-versioned Kubernetes node images.
+## Compute
 
-Designate answers. `openstack zone list` returns an empty list rather than an error, and the
-service has public endpoints in both regions. Whether a subdomain can be delegated to its
-nameservers is a separate question, left to the one-command step: until then, the one wildcard
-record is set by hand, at the registrar's nameservers.
+- **Three availability zones**, `dc3-a-04`, `-09` and `-10`; one zone, `nova`, for volumes and
+  networks.
+- **`-perf1` flavors cap disk I/O** at 500 IOPS and 200 MB/s. A `-perf2` tier exists on request.
+- **Images are rebuilt under the same name**, irregularly, and the old build is hidden, not
+  deleted. The nodes pin an image ID.
+- **Ubuntu 24.04 sees its disk as `/dev/sda`** (virtio-SCSI), on KVM with AMD EPYC-Rome.
+- **No energy counter reaches the guest**: no RAPL, an empty `/sys/class/powercap`.
 
-## Regions and availability zones
+## Network
 
-`openstack availability zone list --compute --volume --network`
+- **A project network gets an MTU of 1500**; Flannel's VXLAN fits inside it.
+- **The router is highly available and translates outbound traffic**; its gateway is billed like
+  a floating IP.
+- **The shared network `ext-net1` hands out public addresses** to any port attached to it. The
+  cluster does not use it.
+- **The project's default security group filters outbound TCP 25.** A new group does not inherit
+  that filter.
+- **The CLI shows `0.0.0.0/0` for rules scoped to a group**; the API returns no prefix.
 
-Two regions are reachable with the same credential, `dc3-a` and `dc4-a`; this project stays in
-`dc3-a`. Within it:
+## Load balancer
 
-- **Compute**: three zones — `dc3-a-04`, `dc3-a-09`, `dc3-a-10`. Enough to spread cluster nodes
-  across failure domains.
-- **Volume and network**: one zone, `nova`.
+- **Provider `amphora`, two amphorae** per load balancer, both in `dc3-a-09` on 2026-10-09.
+- **`ACTIVE` about 1 min 20 s after creation.**
+- **A new health monitor shows its members `ONLINE` for about a minute**, whatever listens.
+- **Any database error while a monitor is created reads "TCP is not a valid option for type".**
 
-Infomaniak's documentation describes the three compute zones as having "different network
-connectivity and power inputs". That is the provider's statement; nothing here can verify it.
-Nova accepts microversions up to 2.93 in `dc3-a` and 2.96 in `dc4-a`; Cinder up to 3.70.
+## Storage
 
-## Compute flavors
-
-`openstack flavor list`
-
-44 public flavors, named `a<vCPU>-ram<GB>-disk<GB>-perf1`.
-
-- vCPU: 1, 2, 4, 8, 12, 16
-- RAM: 2 GB to 64 GB
-- Root disk: 20, 50 or 80 GB, or `0`
-
-`openstack flavor list --long`
-
-- **`-perf1` flavors carry I/O limits** in their extra specs: 500 IOPS and 200 MB/s for writes
-  (`quota:disk_write_iops_sec`, `quota:disk_write_bytes_sec`), and 500 IOPS for reads. These are
-  the same figures as the volume type below. Where their root disk is stored is not documented.
-- **`-disk0` flavors carry no I/O limit of their own.** Infomaniak's documentation says their
-  disk is "the same size as the image". Whether this project can boot one from an image, or
-  only from a volume, was not tested. An earlier version of this page stated the latter as a
-  fact; it had not been checked.
-- **Infomaniak documents a `-perf2` tier**, 1,000 IOPS and 400 MB/s, available on request. It is
-  not visible to this project.
-
-## Images
-
-`openstack image list --status active`
-
-45 active images. The relevant ones here:
-
-- Debian 10, 11, 12, 13
-- Ubuntu LTS 18.04, 20.04, 22.04, 24.04, 26.04, plus 25.04
-- Rocky Linux 9 and 10, RHEL 8, 9 and 10, Oracle Linux 9, CentOS Stream 8 and 9
-- Alpine Linux 3, Fedora Cloud 42, Fedora CoreOS 44, openSUSE Leap 16
-
-Also present: eight `Kaas Ubuntu 2404/2604 Kube V1.30` through `V1.36` node images, two
-Infomaniak rescue images, Windows Server 2019/2022/2025, FreeBSD, OPNsense, Arch, Gentoo,
-RancherOS and CirrOS.
-
-### Images are rebuilt under the same name
-
-`GET /v2/images?os_hidden=true` on the raw API, and `openstack image show <id>`
-
-- **A rebuild replaces the visible image and hides the previous one.** The Ubuntu 24.04 image
-  visible on 2026-09-14 was replaced on 2026-09-28 at 09:02 UTC by a build with a new ID. Hidden
-  builds stay `active` and readable by their ID: on 2026-10-01 there were 46 of Ubuntu 24.04,
-  the oldest from 2024-05-22, and 768 hidden images in all.
-- **The rhythm is irregular.** Six rebuilds of Ubuntu 24.04 between 2026-07-20 and 2026-09-28,
-  nearly always on a Monday around 09:00 UTC; none between December 2025 and February 2026.
-- **The Ubuntu 24.04 image** is `qcow2`, stored in Swift, with its disk on a virtio-SCSI bus
-  (`/dev/sda` in the guest, not `/dev/vda`), the QEMU guest agent enabled, and `ubuntu` as its
-  default user.
-
-The nodes pin an ID rather than a name: a lookup by name would replace the cluster whenever an
-image is republished.
-
-## Networking
-
-`openstack network list` and `openstack network show <name>`
-
-Four networks are visible before the project creates any of its own:
-
-| Network | External | Shared | MTU | Subnets |
-|---|---|---|---|---|
-| `ext-floating1` | yes | no | 8950 | 5 |
-| `ext-provider1` | yes | no | 8950 | 2 |
-| `ext-net1` | no | yes | 1500 | 18 |
-| `ext-v6only1` | no | yes | 1500 | 1 |
-
-`ext-floating1` carries the floating IP pool, and the router of this platform takes its gateway
-there. The two shared networks are not external, so a router cannot use either of them as its
-gateway.
-
-### The shared networks
-
-`GET /v2.0/networks` and `GET /v2.0/subnets` on the raw API, and a probe port created then
-deleted on 2026-09-24
-
-- **`ext-net1` is public address space.** It belongs to another project and its description
-  reads "Public shared network". Seventeen of its subnets are IPv4 `/24` blocks registered to
-  Infomaniak at the RIPE NCC; the eighteenth is an IPv6 `/64`. All of them run DHCP, with
-  resolvers set by the platform.
-- **The project can attach to it directly.** The probe port was accepted, received one public
-  IPv4 and one public IPv6 address, counted against the project's port quota, and was given the
-  `default` security group, having named none.
-- **`ext-v6only1` is its IPv6-only counterpart**: a single `/64`, described as "Public shared
-  IPv6-only network".
-- **The subnets of `ext-floating1` are not visible to the project.**
-
-The cluster uses neither shared network: its nodes sit on a private network behind a router.
-
-### Measured on the network layer
-
-`openstack network show`, `openstack port list --long`, `openstack quota show --usage` and
-`GET /v2.0/routers` on the raw API, after the first `apply` of [`infra/`](../infra/):
-
-- **A project network gets an MTU of 1500**, not the 8950 of the external networks. An overlay
-  built on top of it, such as Flannel's VXLAN in the cluster step, has to fit inside 1500 bytes.
-- **Each subnet with DHCP enabled costs two ports**: Neutron places two `network:dhcp` ports on
-  it.
-- **The router is highly available.** Its interface on the subnet is owned by
-  `network:ha_router_replicated_interface`, the owner Neutron gives to the interfaces of an HA
-  router.
-- **The router translates outbound traffic** (`enable_snat: true`) through a single address on
-  `ext-floating1`.
-- **The router's gateway port is not visible to the project** and does not count against its
-  port quota.
-- **Security group rules scoped to a group are misreported by the CLI**, which prints
-  `0.0.0.0/0` as their source. The API returns no prefix for them. See
-  [what broke](what-broke.md).
-
-### Measured on the load balancer
-
-`openstack loadbalancer provider list`, `flavor list`, `quota show`, `status show` and
-`openstack port show`, on 2026-10-05, then after the ingress step:
-
-- **One provider, `amphora`**, and `octavia` as a deprecated alias of it. No flavor and no
-  availability zone are declared, and the project's load balancer quotas are all `-1`.
-- **A load balancer runs on two amphorae.** Each has a port on the member subnet that carries the
-  VIP as an allowed address pair; both ports belong to another project and do not count against
-  this one's quota. The VIP port does count, and shows `DOWN`: no instance binds it.
-- **The amphorae are not spread across zones.** On 2026-10-09, both ran in `dc3-a-09`.
-- **A load balancer is `ACTIVE` within about 1 min 20 s** of its creation: 1 min 18 s, then
-  1 min 19 s, as upper bounds.
-- **The amphorae reach the members from the subnet.** The node ports admit the subnet only, and
-  the members came up `ONLINE`.
-- **A new health monitor shows its members `ONLINE` for about a minute**, whether anything
-  listens or not.
-- **The first apply of a new load balancer fails on one of its two health monitors**, the one of
-  the 443 pool on both builds, with `TCP is not a valid option for type`. The other, identical,
-  goes through, and a second apply creates the first. The cause, and the fix, are in
-  [what broke](what-broke.md#a-health-monitor-refused-for-a-type-that-was-fine).
-
-## Block storage
-
-`openstack volume type list`
-
-One public volume type, `CEPH_1_perf1`, described as a "Reliable store tolerant to
-disk/server/rack failure", with 500 IOPS and 200 MB/s. The project's quotas also name
-`CEPH_1`, `CEPH_1_perf2`, `CEPH_1_perf3` and `CEPH_1_perf4`, which it cannot see or use.
-
-Measured with a 20 GiB test volume on 2026-10-01, created and deleted the same morning:
-
-- **A volume of zone `nova` attaches to an instance of zone `dc3-a-04`.**
-- **The device name Nova reports is not the guest's.** Nova announced `/dev/sdc`; the guest saw
-  the disk as `/dev/sdb`. The reliable name is `/dev/disk/by-id/scsi-0QEMU_QEMU_HARDDISK_<volume
-  id>`.
-- **Synchronous writes take about 4.5 ms at the median**, as on the instances' root disks. The
-  measurement, and why etcd stays on the root disk, are in
-  [ADR 1](adr/0001-run-a-self-managed-k3s-cluster.md).
-
-## Object storage
-
-`GET /info` on the Swift endpoint, which answers without authentication, and S3 requests
-signed with a key that does not exist, so that nothing can be written. Measured on
-2026-09-24, then confirmed while moving the state there.
-
-- **Swift 2.30.1**, with the `s3api` middleware for the S3 API and `object_versioning` for
-  versioned containers.
-- **The S3 endpoint for `dc3-a` is `https://s3.pub1.infomaniak.cloud`**, the same host as
-  Swift.
-- **The signing region must be `us-east-1`.** A request signed for `dc3-a` is rejected with
-  `AuthorizationHeaderMalformed`, "the region 'dc3-a' is wrong; expecting 'us-east-1'".
-- **Conditional writes are refused.** A `PUT` carrying `If-None-Match: *` gets `501
-  NotImplemented`, "Conditional object PUTs are not supported.", before the signature is even
-  checked. The same request without that header fails on its signature (403). Upstream Swift
-  accepts `If-None-Match: *` from 2.36.0. This is why the state cannot be locked, see
-  [ADR 2](adr/0002-store-the-state-in-swift-without-a-lock.md).
-- **Versioning works through both APIs.** A container with versioning enabled reports
-  `X-Versions-Enabled: True` on Swift and `Enabled` on S3. Its versions are listed with
-  `?versions`, and a `COPY` of an old version onto the current name restores it as a new
-  version (201), without removing the others.
-- **A private container refuses anonymous reads**, with 401.
+- **One volume type, `CEPH_1_perf1`**: 500 IOPS, 200 MB/s. A `nova` volume attaches in any zone;
+  the guest names it differently from Nova, so it is found by `/dev/disk/by-id/`.
+- **Swift 2.30.1, S3 at `https://s3.pub1.infomaniak.cloud`**, signing region `us-east-1`.
+- **Swift refuses conditional writes** (`If-None-Match: *`, 501), so the state cannot be locked.
+- **Swift refuses `aws-chunked` uploads** (501): Velero's checksum is turned off.
+- **Versioning works**; an old version is restored by copying it over the current one.
 
 ## Identity
 
-`openstack ec2 credentials create` with the application credential, and `POST /v3/ec2tokens`
-with a key that does not exist
-
-- **A restricted application credential cannot create S3 keys.** The request is refused with
-  403, "Using method 'application_credential' is not allowed for managing additional
-  application credentials." The message matches a check Keystone added to S3 key creation in
-  a fix backported to its stable branches in April 2026 (bug 2142138). Before it, a restricted
-  credential could create a key carrying every right of its owner.
-- **An S3 key can be exchanged for a Keystone token.** `/v3/ec2tokens` is exposed: an unknown
-  key gets 401, where an unknown route gets 404.
-
-## Quotas
-
-`openstack limits show --absolute` and `openstack quota show`
-
-| Resource | Limit |
-|---|---|
-| Instances | 10 |
-| vCPU | 20 |
-| RAM | 64 GB |
-| Volumes, total size | 20, 1000 GB |
-| Snapshots, backups | 40, 40 (1000 GB) |
-| Keypairs | 10 |
-| Networks, subnets, routers | 10 each |
-| Ports | 20 |
-| Floating IPs | 10 |
-| Security groups, rules | 10, 100 |
-| Server groups, members per group | 10, 10 |
-
-Nova reports `-1` for floating IPs and security groups. Neutron owns those two quotas and is
-the authoritative source; the table above uses Neutron's values.
-
-After the network layer, 3 of the 20 ports are in use: the two DHCP ports and the router
-interface. After the compute layer, 7: one for each of the four instances. A floating IP uses
-none of them. After the ingress step, 8: the load balancer's VIP port. Its amphorae's ports
-belong to another project and do not count.
-
-The platform uses 4 of 10 instances, 7 of 20 vCPUs, 14 of 64 GB of RAM, 2 of 10 floating IPs,
-the bastion's and the ingress's, and no volume. Octavia sets no limit on load balancers here.
+- **An application credential cannot create S3 keys** (403); one is created with the account's
+  password.
+- **Any S3 key can be traded for a Keystone token** (`/v3/ec2tokens`), with the account's rights.
 
 ## Inside an instance
 
-`openstack console log show`, then SSH into the instances, on 2026-10-01
+- **The user data is readable from inside**, on a config drive attached to every instance and
+  from the metadata service.
+- **The console log carries the SSH host keys at first boot**, but Nova keeps only its last
+  1,200 lines or so.
+- **cloud-init is done 41 to 48 s after creation** on a 2 vCPU node.
 
-- **Every instance gets a config drive**, whether or not it is requested: Nova reports
-  `config_drive: True`, and the guest sees an `iso9660` disk labelled `config-2`. cloud-init
-  reads its data from it (`cloud-id: configdrive`).
-- **The metadata service answers as well.** The guest gets a route to `169.254.169.254` through
-  the router, and `/openstack/latest/user_data` returns the user data in clear. Anything placed
-  in user data can be read from inside the instance, two ways.
-- **The hosts are KVM on AMD EPYC-Rome processors.** The image runs kernel 6.8. A 4 GB flavor
-  shows 3,915 MB to the guest; a 20 GB root disk shows 19 GB.
-- **cloud-init finished 41 to 48 s after the instance was created** on a 2 vCPU node, and 82 to
-  84 s on a 1 vCPU instance, in two rounds.
-- **The console log carries the SSH host keys**, which is how the known hosts are built without
-  trusting a first connection. `make ssh-config` reads them there.
-- **Ubuntu's packages come over plain HTTP**, from a mirror named after the zone
-  (`http://dc3-a-04.clouds.archive.ubuntu.com/ubuntu/`) and from `security.ubuntu.com`. Only
-  `snapd` asked for HTTPS.
-- **Addresses are drawn at random from the subnet's pool**: `.17`, `.251`, `.152` for the nodes,
-  then `.66`, `.219`, `.54` after a rebuild, and `.152`, `.72`, `.212` after another on
-  2026-10-05.
-- **No energy counters reach the guest.** `/sys/class/powercap` is empty, and `rapl` is absent
-  from the processor flags in `/proc/cpuinfo`. Power drawn inside an instance can only be
-  estimated.
-- **The firewall runs on `nf_tables`.** `iptables` 1.8.10 uses the `nf_tables` backend, `nft`
-  1.0.9 is installed, and `nftables.service` is disabled; its `/etc/nftables.conf` starts with
-  `flush ruleset`.
-- **cloud-init 26.1 runs `runcmd` as one `/bin/sh` script, without `set -e`**: a failing command
-  does not stop the ones after it.
+## Quotas
+
+| Instances | vCPU | RAM | Volumes | Ports | Floating IPs | Security group rules |
+|---|---|---|---|---|---|---|
+| 10 | 20 | 64 GB | 20, 1000 GB | 20 | 10 | 100 |
+
+The running platform uses 4 instances, 7 vCPUs, 14 GB, 8 ports and 2 floating IPs.
 
 ## Cost
 
-Infomaniak's public price list, then `openstack rating dataframes get` and
-`openstack rating summary get`
-
-Prices below are excluding tax, in CHF per hour, as published on 2026-09-28. CloudKitty reports
-in ICU, at 50 ICU to the franc.
+CHF per hour, excluding tax, as published on 2026-09-28. CloudKitty counts in ICU, 50 to the franc.
 
 | Resource | CHF per hour |
 |---|---|
-| `a1-ram2-disk20-perf1` (bastion) | 0.00640 |
-| `a2-ram4-disk20-perf1` (node) | 0.01043 |
-| `a2-ram4-disk0`, without its volume | 0.00805 |
-| Volume `CEPH_1_perf1`, per GiB | 0.00012 |
+| `a1-ram2-disk20-perf1`, the bastion | 0.00640 |
+| `a2-ram4-disk20-perf1`, a node | 0.01043 |
+| Volume, per GiB | 0.00012 |
 | Floating IP, or the router's gateway | 0.00457 |
 | Load balancer | 0.0137 |
 
-- **The router's gateway is billed** like a floating IP, from the moment the router exists.
-- **The running platform comes to 0.0651 CHF an hour**, about 1.56 a day: the bastion, three
-  nodes, the load balancer, and three addresses billed as floating IPs (the bastion's, the
-  router's gateway and the ingress's).
-- **Destroyed, it still costs about 0.11 CHF a day**, plus the state's storage: the ingress's
-  address lives in the bootstrap stack and stays allocated.
-- **CloudKitty matches the list price to the fifth decimal.** It splits an instance into two
-  hourly lines: for a node, `instance_up` at 0.40243 ICU and `instance_reserved` at 0.11890 ICU,
-  0.010427 CHF in all.
-- **CloudKitty missed part of the bill.** Over the nine hours rated by 2026-10-01 noon, one of
-  the four instances, the node in `dc3-a-10`, had no `instance_up` line at all, only its reserved
-  part, although it was running and in use. The hour from 04:00 UTC was missing for every
-  resource. The rated cost is therefore lower than the price list says, and comparing energy
-  with cost later has to allow for it.
-
-## Starting state
-
-`openstack keypair list`, `openstack security group list` and
-`openstack security group rule list default`
-
-No keypairs, and the default security group only. Everything this platform runs on is created
-by the code in this repository.
-
-The default group is not Neutron's stock one. Its TCP egress is split into ports 1–24 and
-26–65535, so **outbound TCP port 25 is filtered**; UDP and ICMP egress are open, and ingress is
-allowed only from members of the group.
-
-**That filter is not inherited.** A probe group, created then deleted on 2026-09-24, came with
-Neutron's two stock rules and nothing else: all outbound IPv4, all outbound IPv6. The API that
-would describe this template, `/v2.0/default-security-group-rules`, answers 404 on this
-platform. Security groups here are stateful (`stateful: true`): the reply to an accepted
-connection needs no rule of its own.
-
-The group this repository creates deletes Neutron's default rules and declares every flow
-itself (`delete_default_rules = true`): every flow a node can open is declared, and reviewed as
-code.
+- **Running: about 1.56 CHF a day.** Destroyed: about 0.11, for the stable address.
+- **CloudKitty matches the list price, but missed part of the bill**: over nine hours, one running
+  node had only its reserved part rated. Its figures are a lower bound.
